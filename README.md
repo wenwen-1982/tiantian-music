@@ -4,6 +4,14 @@
 
 ![播放界面](preview/02-playing.png)
 
+## 下载（Windows 免安装版）
+
+| 版本 | 文件 | 说明 |
+|---|---|---|
+| v1.0.0 | [TianTianMusic-v1.0.0-win64.zip](https://github.com/wenwen-1982/tiantian-music/releases/download/v1.0.0/TianTianMusic-v1.0.0-win64.zip) | Windows 10/11 64 位绿色版，105.6 MB，解压后双击 `天天音乐.exe` 即可运行，无需安装 |
+
+全部版本见 [Releases](https://github.com/wenwen-1982/tiantian-music/releases)。
+
 ## 功能
 
 | 模块 | 说明 |
@@ -47,9 +55,9 @@ npm start          # 启动桌面版
 npm run dist       # electron-builder → 便携版 exe
 ```
 
-产物为绿色免安装目录 / 单文件 exe，双击 `天天音乐.exe` 即可运行。
+产物为绿色免安装目录 / 单文件 exe，双击 `天天音乐.exe` 即可运行。已发布的成品见上方 [下载](#下载windows-免安装版)。
 
-> 若网络无法直连 npm 的 Electron 二进制源，可先手动下载 `electron-v31.7.7-win32-x64.zip`（如 npmmirror 镜像），解压后将本项目代码打成 `resources/app.asar`（可用 `@electron/asar` 的 `createPackage`），并把 `electron.exe` 重命名为 `天天音乐.exe` 即可得到便携版。
+> 若网络无法直连 npm 的 Electron 二进制源，可先手动下载 `electron-v31.7.7-win32-x64.zip`（如 npmmirror 镜像），解压后将本项目代码打成 `resources/app.asar`（推荐用 `@electron/asar` 的 `createPackage` API），并把 `electron.exe` 重命名为 `天天音乐.exe` 即可得到便携版。
 
 ## 目录结构
 
