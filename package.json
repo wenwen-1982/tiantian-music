@@ -1,0 +1,47 @@
+{
+  "name": "tiantian-music",
+  "version": "1.0.0",
+  "description": "天天音乐 · 本地 + 开放版权曲库播放器（Electron + WebAudio，界面风格参考方格音乐）",
+  "main": "electron/main.js",
+  "license": "MIT",
+  "author": "wenwen-1982",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/wenwen-1982/tiantian-music.git"
+  },
+  "keywords": [
+    "music-player",
+    "electron",
+    "webaudio",
+    "lyrics",
+    "lrc",
+    "ccmixter",
+    "lrclib"
+  ],
+  "scripts": {
+    "start": "electron .",
+    "web": "npx serve .",
+    "dist": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^26.0.0"
+  },
+  "build": {
+    "appId": "com.tiantian.music",
+    "productName": "天天音乐",
+    "files": [
+      "index.html",
+      "assets/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": ["portable"],
+      "icon": "build/icon.ico"
+    },
+    "portable": {
+      "artifactName": "天天音乐-${version}-win64.${ext}"
+    }
+  }
+}
