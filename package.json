@@ -1,4 +1,4 @@
-﻿{
+{
   "name": "tiantian-music",
   "version": "1.1.0",
   "description": "天天音乐 · 一款开源的桌面音乐播放器：本地音乐 + 开放版权在线曲库 + 歌词，开箱即用（Electron + WebAudio）",
@@ -37,11 +37,16 @@
       "package.json"
     ],
     "win": {
-      "target": ["portable"],
+      "target": [
+        "portable"
+      ],
       "icon": "build/icon.ico"
     },
     "portable": {
       "artifactName": "天天音乐-${version}-win64.${ext}"
     }
+  },
+  "dependencies": {
+    "@electron/asar": "^4.3.1"
   }
 }
