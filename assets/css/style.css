@@ -276,14 +276,28 @@ input, textarea { font: inherit; }
 }
 .vstage-empty .big { font-size: 42px; }
 .video-stage .vctrl {
-  position: absolute; left: 0; right: 0; bottom: 0; height: 40px;
-  display: flex; align-items: center; gap: 10px; padding: 0 12px;
-  background: linear-gradient(transparent, rgba(0, 0, 0, .72));
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: flex; flex-direction: column; gap: 6px; padding: 10px 12px 8px;
+  background: linear-gradient(transparent, rgba(0, 0, 0, .78) 45%);
   color: #e8e9f2; font-size: 12.5px; opacity: 0; transition: opacity .2s;
 }
 .video-stage:hover .vctrl, .video-stage:fullscreen .vctrl { opacity: 1; }
+.video-stage .vctrl .vrow { display: flex; align-items: center; gap: 10px; }
 .video-stage .vctrl .vt { overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .video-stage .vctrl .sp { flex: 1; }
+/* 视频进度条（常规 / 全屏通用） */
+.video-stage .vprog { display: flex; align-items: center; gap: 10px; }
+.video-stage .vprog .time { font-variant-numeric: tabular-nums; color: #cfd2e6; font-size: 11.5px; min-width: 44px; text-align: center; }
+.video-stage .vprog .bar { height: 5px; background: rgba(255, 255, 255, .22); }
+.video-stage .vprog .bar .fill { background: var(--accent); }
+.video-stage .vprog .bar:hover > .fill::after { opacity: 1; }
+/* 全屏下加大控件，便于远距离操作 */
+.video-stage:fullscreen .vctrl { padding: 18px 24px 14px; gap: 10px; font-size: 15px; }
+.video-stage:fullscreen .vprog .bar { height: 8px; border-radius: 4px; }
+.video-stage:fullscreen .vprog .bar .fill { border-radius: 4px; }
+.video-stage:fullscreen .vprog .time { font-size: 14px; min-width: 56px; }
+.video-stage:fullscreen .vctrl .vbtn { width: 34px; height: 34px; font-size: 15px; }
+.video-stage:fullscreen .vctrl select { font-size: 14px; padding: 5px 8px; }
 .video-stage .vctrl .vsel { display: flex; align-items: center; gap: 6px; color: #a2a7c4; }
 .video-stage .vctrl select {
   background: rgba(255, 255, 255, .12); color: #fff; border: 0; border-radius: 6px;
@@ -295,6 +309,43 @@ input, textarea { font: inherit; }
   background: rgba(255, 255, 255, .12); color: #fff; font-size: 13px; line-height: 1;
 }
 .video-stage .vctrl .vbtn:hover { background: var(--accent); }
+
+/* 画中画悬浮控制条（PiP 窗口内无法注入 DOM，控制条放在应用内） */
+#pipBar {
+  position: fixed; left: 50%; transform: translateX(-50%) translateY(12px);
+  bottom: 92px; width: min(560px, calc(100vw - 32px));
+  background: var(--bg-2); border: 1px solid var(--line); border-radius: 12px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, .38); padding: 10px 14px;
+  display: none; flex-direction: column; gap: 8px; z-index: 120;
+  opacity: 0; transition: opacity .18s, transform .18s;
+}
+#pipBar.show { display: flex; opacity: 1; transform: translateX(-50%) translateY(0); }
+#pipBar .pb-head {
+  display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--text-3);
+}
+#pipBar .pb-head .pb-dot {
+  width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex: 0 0 8px;
+  animation: pipPulse 1.6s ease-in-out infinite;
+}
+@keyframes pipPulse { 0%, 100% { opacity: 1; } 50% { opacity: .35; } }
+#pipBar .pb-title {
+  flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+  color: var(--text); font-size: 12.5px;
+}
+#pipBar .pb-prog { display: flex; align-items: center; gap: 10px; }
+#pipBar .pb-prog .time { font-size: 11.5px; color: var(--text-3); min-width: 44px; text-align: center; font-variant-numeric: tabular-nums; }
+#pipBar .pb-acts { display: flex; align-items: center; gap: 8px; }
+#pipBar .pb-acts .vbtn {
+  width: 30px; height: 30px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--bg-3); color: var(--text); font-size: 13px; cursor: pointer; line-height: 1;
+}
+#pipBar .pb-acts .vbtn:hover { background: var(--accent); color: #fff; }
+#pipBar .pb-acts .pb-btn {
+  height: 30px; padding: 0 10px; border-radius: 7px; border: 1px solid var(--line);
+  background: var(--bg-3); color: var(--text-2); font-size: 12px; cursor: pointer;
+}
+#pipBar .pb-acts .pb-btn:hover { color: var(--text); border-color: var(--accent); }
+#pipBar .pb-acts #btnPipExit { margin-left: auto; }
 
 /* 队列抽屉 */
 #queueDrawer {

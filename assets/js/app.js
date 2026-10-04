@@ -843,6 +843,35 @@
       TV.toggleFullscreen();
     });
 
+    // 视频进度条：舞台内（含全屏）与画中画悬浮条都可拖动跳转
+    dragBar($("#barVideo"), (r) => {
+      if (!videoMode) return;
+      const d = TV.duration();
+      if (d) TV.seek(d * r);
+    });
+    dragBar($("#barPip"), (r) => {
+      if (!videoMode) return;
+      const d = TV.duration();
+      if (d) TV.seek(d * r);
+    });
+    $("#btnPipToggle").addEventListener("click", () => { if (videoMode) playerToggle(); });
+    $("#btnPipBack").addEventListener("click", () => { if (videoMode) TV.seek(TV.currentTime() - 5); });
+    $("#btnPipFwd").addEventListener("click", () => { if (videoMode) TV.seek(TV.currentTime() + 5); });
+    $("#btnPipExit").addEventListener("click", () => TV.togglePip());
+    // 画中画进入 / 退出：显示或隐藏悬浮控制条
+    const vel = TV.ensureEl();
+    if (vel) {
+      vel.addEventListener("enterpictureinpicture", () => {
+        $("#pipBar").classList.add("show");
+        const t = TV.getTrack();
+        $("#pbTitle").textContent = t ? t.title : "—";
+        syncPipToggleIcon();
+      });
+      vel.addEventListener("leavepictureinpicture", () => {
+        $("#pipBar").classList.remove("show");
+      });
+    }
+
     // 拖拽导入
     let dragDepth = 0;
     window.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; $("#dropMask").classList.add("show"); });
@@ -886,7 +915,7 @@
     $("#volRange").addEventListener("input", (e) => setVolume(e.target.value / 100));
     $("#swAutoLrc").addEventListener("click", () => { state.autoLrc = !state.autoLrc; $("#swAutoLrc").classList.toggle("on", state.autoLrc); persist(); });
     $("#swAutoPlay").addEventListener("click", () => toast("该功能仅桌面版可用"));
-    $("#btnAbout").addEventListener("click", () => toast("天天音乐 1.1.0 · 本地播放 + 视频播放 + 开放版权曲库 + 歌词同步", 3200));
+    $("#btnAbout").addEventListener("click", () => toast("天天音乐 1.1.1 · 本地播放 + 视频播放 + 开放版权曲库 + 歌词同步", 3200));
 
     // 快捷键
     window.addEventListener("keydown", (e) => {
@@ -920,14 +949,33 @@
     function onPlay() {
       $("#iconPlay").innerHTML = '<path d="' + PAUSE_PATH + '"/>';
       $("#player").classList.add("playing");
+      syncPipToggleIcon();
       renderQueue();
       refreshPlayingRows();
     }
-    function onPause() { $("#iconPlay").innerHTML = '<path d="' + PLAY_PATH + '"/>'; }
+    function onPause() {
+      $("#iconPlay").innerHTML = '<path d="' + PLAY_PATH + '"/>';
+      syncPipToggleIcon(); // 暂停时 rAF 已停，需主动刷新 PiP 条上的图标
+    }
+    // 画中画悬浮条上的播放/暂停图标
+    function syncPipToggleIcon() {
+      const b = $("#btnPipToggle");
+      if (b) b.textContent = playerPlaying() ? "❚❚" : "▶";
+    }
     function onTime(d) {
       $("#tCur").textContent = L.fmtTime(d.current);
       $("#tDur").textContent = L.fmtTime(d.duration);
       $("#fillProgress").style.width = d.duration ? (d.current / d.duration) * 100 + "%" : "0%";
+      // 视频舞台进度条（常规与全屏共用同一套 DOM）
+      const pct = d.duration ? (d.current / d.duration) * 100 + "%" : "0%";
+      $("#fillVideo").style.width = pct;
+      $("#vCur").textContent = L.fmtTime(d.current);
+      $("#vDur").textContent = L.fmtTime(d.duration);
+      // 画中画悬浮条进度
+      $("#fillPip").style.width = pct;
+      $("#pbCur").textContent = L.fmtTime(d.current);
+      $("#pbDur").textContent = L.fmtTime(d.duration);
+      if (videoMode) syncPipToggleIcon();
       if (!videoMode) syncLyrics(d.current);
     }
     [E, TV].forEach((P) => {
