@@ -1,8 +1,8 @@
-/* ============================================================
+﻿/* ============================================================
  * 天天音乐 · 主应用（界面状态 + 交互）
  * ============================================================ */
 (function () {
-  const L = window.TTLibrary, E = window.TTEngine, API = window.TTAPI;
+  const L = window.TTLibrary, E = window.TTEngine, API = window.TTAPI, TV = window.TTVideo;
   const $ = (s) => document.querySelector(s);
   const $$ = (s) => Array.prototype.slice.call(document.querySelectorAll(s));
 
@@ -12,6 +12,7 @@
     mode: saved.mode || "order",              // order | single | shuffle
     favorites: saved.favorites || [],         // 收藏的曲目对象
     local: saved.local || [],                 // 本地导入（不含 blob，仅元信息用于展示）
+    videos: saved.videos || [],               // 本地导入的视频
     recent: saved.recent || [],
     downloads: saved.downloads || [],
     volume: typeof saved.volume === "number" ? saved.volume : 0.7,
@@ -24,7 +25,8 @@
     // blob url 不能持久化，只保存元信息
     L.saveState({
       mode: state.mode, favorites: state.favorites,
-      local: state.local.slice(0, 300), recent: state.recent.slice(0, 100),
+      local: state.local.slice(0, 300), videos: state.videos.slice(0, 300),
+      recent: state.recent.slice(0, 100),
       downloads: state.downloads.slice(0, 100), volume: state.volume,
       accent: state.accent, theme: state.theme, autoLrc: state.autoLrc, saveDir: state.saveDir,
     });
@@ -37,6 +39,8 @@
   let viewStack = ["discover"];
   let onlineResults = [];
   let searchTimer = null;
+  let videoMode = false;        // 当前播放的是视频
+  let lastVolume = 0.7;         // 静音前的音量
 
   const ACCENTS = ["#5b67e0", "#7c5cf8", "#e0567b", "#e08a3c", "#3fae72", "#3a9bd6"];
   const CLOUD_BADGE = "☁";
@@ -54,15 +58,43 @@
   }
   function coverHtml(track, cls) {
     if (track && track.cover) return '<img src="' + track.cover + '" alt="">';
+    if (track && track.kind === "video") return "🎬";
     if (track && track.kind === "synth") return "♪";
     return "♪";
   }
   function coverStyle(track) {
     const seed = track ? (track.album || track.title || "tt") : "tt";
+    if (track && track.kind === "video") return "background:#111";
     if (track && track.cover) return "background:#000";
     return "background:" + L.gradientFor(seed);
   }
   function setNet(text) { $("#netStatus").textContent = text; }
+
+  /* ---------------- 音量（音频 + 视频统一，带百分比） ---------------- */
+  function volIconPath(v) {
+    if (v <= 0.001) return "M5 9h3l4-4v14l-4-4H5V9zm11.7 1.3l1.4-1.4 5 5-1.4 1.4-5-5z";
+    if (v < 0.5) return "M5 9h3l4-4v14l-4-4H5V9zm10 .5a3 3 0 010 5v-2a1 1 0 000-1v-2z";
+    return "M5 9h3l4-4v14l-4-4H5V9zm11-1a4 4 0 010 8v-2a2 2 0 000-4V8zm0-3a7 7 0 010 14v-2a5 5 0 000-10V5z";
+  }
+  function setVolume(v, opts) {
+    opts = opts || {};
+    v = Math.max(0, Math.min(1, v));
+    if (v > 0.001) lastVolume = v;
+    state.volume = v;
+    E.setVolume(v);
+    if (TV) TV.setVolume(v);
+    const pct = Math.round(v * 100) + "%";
+    $("#volPct").textContent = pct;
+    const vt = $("#volText");
+    if (vt) vt.textContent = pct;
+    const vr = $("#volRange");
+    if (vr && document.activeElement !== vr) vr.value = Math.round(v * 100);
+    $("#fillVolume").style.width = (v * 100) + "%";
+    const icon = $("#btnVol svg path");
+    if (icon) icon.setAttribute("d", volIconPath(v));
+    $("#barVolume").title = "音量 " + pct;
+    if (opts.persist !== false) persist();
+  }
 
   /* ---------------- 主题 ---------------- */
   function applyTheme() {
@@ -101,6 +133,7 @@
     if (name === "local") renderLocal();
     if (name === "recent") renderRecent();
     if (name === "download") renderDownload();
+    if (name === "video") renderVideo();
     if (name === "setting") renderSetting();
     if (name === "searchResult") renderSearchResult();
   }
@@ -214,10 +247,55 @@
     ).join("");
   }
 
+  /* ---------------- 视频 ---------------- */
+  function fmtSize(n) {
+    if (!n) return "—";
+    if (n < 1024 * 1024) return Math.round(n / 1024) + " KB";
+    if (n < 1024 * 1024 * 1024) return (n / 1024 / 1024).toFixed(1) + " MB";
+    return (n / 1024 / 1024 / 1024).toFixed(2) + " GB";
+  }
+  function videoRow(track, idx) {
+    const cur = sameSong(TV.getTrack(), track);
+    const isPlaying = cur && (videoMode || TV.isPlaying());
+    const faved = isFaved(track);
+    return '' +
+      '<div class="row' + (isPlaying ? " playing" : "") + '" data-idx="' + idx + '" data-act="play" data-list="video">' +
+        '<div class="idx">' + (cur ? "▶" : String(idx + 1).padStart(2, "0")) + "</div>" +
+        '<div class="t"><div class="mini" style="' + coverStyle(track) + '">' + coverHtml(track) + "</div>" +
+          '<div class="nm"><div class="n">' + esc(track.title) + "</div>" +
+          '<div class="s">' + esc(track.fileName || track.path || "") + "</div></div></div>" +
+        "<div>" + (track.duration ? L.fmtTime(track.duration) : "—") + "</div>" +
+        "<div>" + fmtSize(track.size) + "</div>" +
+        '<div class="acts">' +
+          '<button data-act="remove" data-list="video" data-idx="' + idx + '" title="移除">✕</button>' +
+          '<button data-act="fav" data-list="video" data-idx="' + idx + '" class="' + (faved ? "on" : "") + '" title="收藏">♥</button>' +
+        "</div>" +
+      "</div>";
+  }
+  function renderVideo() {
+    const list = state.videos;
+    const cur = TV.getTrack();
+    $("#videoStage").classList.toggle("has", !!cur);
+    $("#vstageEmpty").style.display = cur ? "none" : "flex";
+    if (cur) {
+      $("#vTitle").textContent = cur.title + (cur.duration ? "  ·  " + L.fmtTime(cur.duration) : "");
+    } else {
+      $("#vTitle").textContent = "未在播放";
+    }
+    const cnt = playlist.filter((t) => t.kind === "video").length;
+    $("#videoTip").textContent = list.length ? ("共 " + list.length + " 个视频" + (cnt ? " · 队列中 " + cnt + " 个" : "")) : "";
+    if (!list.length) {
+      $("#listVideo").innerHTML = '<div class="empty"><div class="big">🎬</div><div>还没有导入视频</div>' +
+        '<div>支持 mp4 / webm / mkv / mov / m4v 等常见格式</div><button data-act="import-video">导入视频</button></div>';
+      return;
+    }
+    $("#listVideo").innerHTML = '<div class="list-head"><div style="text-align:center">#</div><div>标题</div><div>时长</div>' +
+      '<div>大小</div><div style="text-align:right">操作</div></div>' + list.map((t, i) => videoRow(t, i)).join("");
+  }
+
   function renderSetting() {
     $("#btnMode").textContent = modeName();
-    $("#volRange").value = Math.round(state.volume * 100);
-    $("#volText").textContent = Math.round(state.volume * 100) + "%";
+    setVolume(state.volume, { persist: false });
     $("#swAutoLrc").classList.toggle("on", state.autoLrc);
     $("#swAutoPlay").classList.toggle("on", false);
     renderSwatches();
@@ -239,15 +317,41 @@
     else if (!playlist.some((t) => sameSong(t, track))) { playlist = playlist.concat([track]); currentIndex = playlist.length - 1; }
     else { currentIndex = playlist.findIndex((t) => sameSong(t, track)); }
 
-    E.load(track, { autoplay: true });
+    if (track.kind === "video") {
+      enterVideo(track);
+    } else {
+      exitVideo();
+      E.load(track, { autoplay: true });
+    }
     updateNowBar(track);
     addRecent(track);
     renderQueue();
     prepareLyrics(track);
     refreshPlayingRows();
     $("#player").classList.add("playing");
-    setNet(track.source === "ccmixter" ? "在线播放" : "本地播放");
+    setNet(track.kind === "video" ? "视频播放" : track.source === "ccmixter" ? "在线播放" : "本地播放");
   }
+  function enterVideo(track) {
+    videoMode = true;
+    try { E.pause(); } catch (e) {}
+    $("#player").classList.add("video");
+    TV.setVolume(state.volume);
+    TV.load(track, { autoplay: true });
+    switchView("video");
+    renderVideo();
+  }
+  function exitVideo() {
+    if (!videoMode) return;
+    videoMode = false;
+    $("#player").classList.remove("video");
+    try { TV.pause(); } catch (e) {}
+  }
+  // 统一的时间轴访问（音频 / 视频）
+  function playerDuration() { return videoMode ? TV.duration() : E.duration(); }
+  function playerCurrent() { return videoMode ? TV.currentTime() : E.currentTime(); }
+  function playerSeek(sec) { videoMode ? TV.seek(sec) : E.seek(sec); }
+  function playerToggle() { videoMode ? TV.toggle() : E.toggle(); }
+  function playerPlaying() { return videoMode ? TV.isPlaying() : E.isPlaying(); }
   function addRecent(track) {
     if (track.source === "ccmixter") return;
     state.recent = [track].concat(state.recent.filter((t) => !sameSong(t, track))).slice(0, 100);
@@ -260,6 +364,8 @@
       daily: L.DEMO_TRACKS.slice(0, 6),
       favorite: state.favorites,
       local: state.local,
+      videos: state.videos,
+      video: state.videos,
       recent: state.recent,
       online: onlineResults,
     };
@@ -274,7 +380,11 @@
   }
   function next(auto) {
     if (!playlist.length) return;
-    if (state.mode === "single" && auto) { E.seek(0); E.play(); return; }
+    if (state.mode === "single" && auto) {
+      playerSeek(0);
+      videoMode ? TV.play() : E.play();
+      return;
+    }
     if (state.mode === "shuffle" && playlist.length > 1) {
       let n = currentIndex;
       while (n === currentIndex) n = Math.floor(Math.random() * playlist.length);
@@ -309,16 +419,17 @@
     $("#npSub").textContent = (track.artist || "未知歌手") + (track.album ? " · " + track.album : "");
     $("#pFav").classList.toggle("on", isFaved(track));
     const p = track.preset;
-    $("#tDur").textContent = p ? L.fmtTime(p.duration) : "00:00";
+    $("#tDur").textContent = p ? L.fmtTime(p.duration) : (track.duration ? L.fmtTime(track.duration) : "00:00");
   }
   function refreshPlayingRows() {
-    const cur = E.getTrack();
+    const cur = videoMode ? TV.getTrack() : E.getTrack();
     $$(".row").forEach((row) => {
       const list = row.dataset.list, idx = parseInt(row.dataset.idx, 10);
       let t = null;
       if (list === "daily") t = L.DEMO_TRACKS.slice(0, 6)[idx];
       else if (list === "favorite") t = state.favorites[idx];
       else if (list === "local") t = state.local[idx];
+      else if (list === "video") t = state.videos[idx];
       else if (list === "recent") t = state.recent[idx];
       else if (list === "online") t = onlineResults[idx];
       else if (list && list.indexOf("rank:") === 0) {
@@ -327,11 +438,13 @@
       }
       row.classList.toggle("playing", !!(t && cur && sameSong(t, cur)));
     });
+    if ($("#view-video").classList.contains("active")) renderVideo();
   }
 
   function updateBadges() {
     $("#badgeFav").textContent = state.favorites.length;
     $("#badgeLocal").textContent = state.local.length;
+    $("#badgeVideo").textContent = state.videos.length;
   }
 
   function renderQueue() {
@@ -346,6 +459,12 @@
   function prepareLyrics(track) {
     currentLyrics = [];
     lyricsRaw = "";
+    if (track.kind === "video") {
+      $("#lyrics").innerHTML = '<div style="color:var(--text-3);padding:20px 0">正在播放视频 · 双击画面或点下面按钮全屏' +
+        '<div style="margin-top:12px"><button class="btn" data-act="vfull">全屏播放</button>' +
+        '<button class="btn" data-act="vstage" style="margin-left:10px">回到视频页</button></div></div>';
+      return;
+    }
     if (track.lyricsText) { lyricsRaw = track.lyricsText; currentLyrics = L.parseLRC(track.lyricsText) || []; }
     if (!currentLyrics.length && track.kind === "synth") {
       // 内置曲目：生成段落提示
@@ -448,6 +567,91 @@
     toast("已导入 " + added.length + " 首");
   }
 
+  /* ---------------- 视频导入 ---------------- */
+  const VIDEO_RE = /\.(mp4|webm|mkv|mov|m4v|avi|flv|wmv|mpg|mpeg|ts|3gp)$/i;
+
+  function makeVideoTrack(file) {
+    return {
+      id: "video-" + file.name + "-" + (file.size || 0) + "-" + (file.lastModified || 0),
+      title: file.name.replace(/\.[^.]+$/, ""),
+      artist: "本地视频",
+      album: "本地视频",
+      kind: "video",
+      url: URL.createObjectURL(file),
+      fileName: file.name,
+      size: file.size || 0,
+    };
+  }
+  // 读取视频时长（元数据），失败则保持未知
+  function probeDuration(track) {
+    return new Promise((resolve) => {
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      v.muted = true;
+      const done = (val) => { try { v.removeAttribute("src"); v.load(); } catch (e) {} resolve(val); };
+      const timer = setTimeout(() => done(0), 8000);
+      v.onloadedmetadata = () => { clearTimeout(timer); done(isFinite(v.duration) ? v.duration : 0); };
+      v.onerror = () => { clearTimeout(timer); done(0); };
+      v.src = track.url;
+    });
+  }
+  function openVideoPicker() {
+    if (API.hasDesktop && window.ttDesktop.pickVideos) {
+      window.ttDesktop.pickVideos().then((files) => {
+        if (files && files.length) importVideos(files, true);
+      });
+    } else {
+      $("#videoPicker").click();
+    }
+  }
+  function openAudioPicker() {
+    if (API.hasDesktop && window.ttDesktop.pickFiles) {
+      window.ttDesktop.pickFiles().then((files) => {
+        if (!files || !files.length) return;
+        const tracks = files.map((f) => ({
+          id: "local-" + f.path, title: f.name.replace(/\.[^.]+$/, ""), artist: "未知歌手",
+          album: "本地文件", kind: "file", url: f.url, path: f.path, fileName: f.name,
+        }));
+        state.local = tracks.concat(state.local);
+        persist(); updateBadges(); renderLocal(); switchView("local");
+        toast("已导入 " + tracks.length + " 首");
+      });
+    } else {
+      $("#filePicker").click();
+    }
+  }
+  async function importVideos(files, fromDesktop) {    const arr = Array.prototype.filter.call(files, (f) => VIDEO_RE.test(f.name) || (f.type || "").indexOf("video") === 0);
+    if (!arr.length) { toast("没有找到可导入的视频文件"); return 0; }
+    setNet("读取视频信息…");
+    const added = [];
+    for (const f of arr) {
+      const t = fromDesktop
+        ? { id: "video-" + f.path, title: f.name.replace(/\.[^.]+$/, ""), artist: "本地视频", album: "本地视频",
+            kind: "video", url: f.url, path: f.path, fileName: f.name, size: f.size || 0 }
+        : makeVideoTrack(f);
+      added.push(t);
+    }
+    state.videos = added.concat(state.videos);
+    persist();
+    updateBadges();
+    renderVideo();
+    switchView("video");
+    setNet("就绪");
+    toast("已导入 " + added.length + " 个视频");
+    // 后台补全时长
+    (async () => {
+      for (const t of added) {
+        try {
+          const d = await probeDuration(t);
+          if (d) { t.duration = d; }
+        } catch (e) {}
+      }
+      persist();
+      if ($("#view-video").classList.contains("active")) renderVideo();
+    })();
+    return added.length;
+  }
+
   /* ---------------- 在线搜索 ---------------- */
   async function doOnlineSearch(q) {
     if (!q) return;
@@ -468,10 +672,12 @@
   }
   function localSearch(q) {
     if (!q) return;
-    const hit = state.local.filter((t) => (t.title + t.artist + t.album).toLowerCase().includes(q.toLowerCase()));
-    const demo = L.DEMO_TRACKS.filter((t) => (t.title + t.artist).toLowerCase().includes(q.toLowerCase()));
-    if (!hit.length && !demo.length) { doOnlineSearch(q); return; }
-    const all = demo.concat(hit);
+    const k = q.toLowerCase();
+    const hit = state.local.filter((t) => (t.title + t.artist + t.album).toLowerCase().includes(k));
+    const vhit = state.videos.filter((t) => (t.title + t.artist + (t.fileName || "")).toLowerCase().includes(k));
+    const demo = L.DEMO_TRACKS.filter((t) => (t.title + t.artist).toLowerCase().includes(k));
+    if (!hit.length && !demo.length && !vhit.length) { doOnlineSearch(q); return; }
+    const all = demo.concat(hit).concat(vhit);
     switchView("discover", false);
     $("#content").innerHTML = "";
     toast("本地/内置命中 " + all.length + " 首，回车可同时联网搜索");
@@ -533,6 +739,9 @@
       else if (act === "preset") { const p = L.PLAY_PRESETS[idx]; const arr = p.trackIds.map(L.demoById).filter(Boolean); playTrack(arr[0], arr, 0); toast("已播放：" + p.name); }
       else if (act === "queue") { playTrack(playlist[idx], playlist, idx); }
       else if (act === "import") { $("#filePicker").click(); }
+      else if (act === "import-video") { openVideoPicker(); }
+      else if (act === "vfull") { $("#nowPanel").classList.remove("show"); TV.toggleFullscreen(); }
+      else if (act === "vstage") { $("#nowPanel").classList.remove("show"); switchView("video"); }
       else if (act === "fetch-lrc") { const t = E.getTrack(); if (t) autoFetchLyrics(t); }
       else if (act === "load-lrc") { pickLrcFile(); }
       else if (act === "openfile") { if (API.hasDesktop && window.ttDesktop.openPath) window.ttDesktop.openPath(state.saveDir || ""); }
@@ -541,46 +750,43 @@
 
     // 播放控制
     $("#btnPlay").addEventListener("click", () => {
+      if (videoMode) { playerToggle(); return; }
       if (!E.getTrack()) { const t = L.DEMO_TRACKS[0]; playTrack(t, L.DEMO_TRACKS.slice(0, 6), 0); return; }
-      E.toggle();
+      playerToggle();
     });
     $("#btnPrev").addEventListener("click", prev);
     $("#btnNext").addEventListener("click", () => next(false));
     $("#btnModeIcon").addEventListener("click", cycleMode);
-    $("#btnNow").addEventListener("click", () => $("#nowPanel").classList.add("show"));
+    $("#btnNow").addEventListener("click", () => {
+      if (videoMode) { TV.toggleFullscreen(); return; }
+      $("#nowPanel").classList.add("show");
+    });
     $("#npClose").addEventListener("click", () => $("#nowPanel").classList.remove("show"));
     $("#btnQueue").addEventListener("click", () => $("#queueDrawer").classList.toggle("show"));
     $("#queueClear").addEventListener("click", () => { playlist = []; currentIndex = -1; renderQueue(); toast("队列已清空"); });
 
     // 进度条 / 音量条拖动
-    dragBar($("#barProgress"), (r) => { const d = E.duration(); if (d) E.seek(d * r); });
-    dragBar($("#barVolume"), (r) => { state.volume = r; E.setVolume(r); persist(); renderSetting(); });
-    $("#btnVol").addEventListener("click", () => { const v = state.volume > 0 ? 0 : 0.7; state.volume = v; E.setVolume(v); persist(); renderSetting(); });
+    dragBar($("#barProgress"), (r) => { const d = playerDuration(); if (d) playerSeek(d * r); });
+    dragBar($("#barVolume"), (r) => setVolume(r));
+    $("#btnVol").addEventListener("click", () => {
+      if (state.volume > 0.001) { setVolume(0); toast("已静音"); }
+      else { setVolume(lastVolume || 0.7); toast("音量 " + Math.round(state.volume * 100) + "%"); }
+    });
+    // 音量条悬停滚轮微调
+    $("#barVolume").addEventListener("wheel", (e) => {
+      e.preventDefault();
+      setVolume(state.volume + (e.deltaY < 0 ? 0.05 : -0.05));
+    }, { passive: false });
 
     // 收藏
     $("#pFav").addEventListener("click", () => { const t = E.getTrack(); if (t) { toggleFavObj(t); } });
 
     // 导入
-    $("#btnImport").addEventListener("click", () => $("#filePicker").click());
-    $("#bannerImport").addEventListener("click", () => $("#filePicker").click());
+    $("#btnImport").addEventListener("click", () => openAudioPicker());
+    $("#bannerImport").addEventListener("click", () => openAudioPicker());
     $("#filePicker").addEventListener("change", (e) => { importFiles(e.target.files); e.target.value = ""; });
     $("#dirPicker").addEventListener("change", (e) => { importFiles(e.target.files); e.target.value = ""; });
-    $("#btnImportDir").addEventListener("click", () => {
-      if (API.hasDesktop && window.ttDesktop.pickFiles) {
-        window.ttDesktop.pickFiles().then((files) => {
-          if (!files || !files.length) return;
-          const tracks = files.map((f) => ({
-            id: "local-" + f.path, title: f.name.replace(/\.[^.]+$/, ""), artist: "未知歌手",
-            album: "本地文件", kind: "file", url: f.url, fileName: f.name,
-          }));
-          state.local = tracks.concat(state.local);
-          persist(); updateBadges(); renderLocal(); switchView("local");
-          toast("已导入 " + tracks.length + " 首");
-        });
-      } else {
-        $("#dirPicker").click();
-      }
-    });
+    $("#btnImportDir").addEventListener("click", () => openAudioPicker());
     $("#btnScanDir").addEventListener("click", () => {
       if (!API.hasDesktop || !window.ttDesktop.scanDir) { toast("浏览器预览不支持扫描磁盘目录，请用桌面版或「导入文件夹」"); return; }
       window.ttDesktop.scanDir().then((files) => {
@@ -599,6 +805,44 @@
       state.local = []; persist(); updateBadges(); renderLocal(); toast("已清空列表");
     });
 
+    // 视频导入
+    $("#videoPicker").addEventListener("change", (e) => { importVideos(e.target.files); e.target.value = ""; });
+    $("#videoDirPicker").addEventListener("change", (e) => { importVideos(e.target.files); e.target.value = ""; });
+    $("#btnImportVideo").addEventListener("click", () => openVideoPicker());
+    $("#btnImportVideoDir").addEventListener("click", () => {
+      if (API.hasDesktop && window.ttDesktop.pickVideos) {
+        window.ttDesktop.pickVideos().then((files) => { if (files && files.length) importVideos(files, true); });
+      } else {
+        $("#videoDirPicker").click();
+      }
+    });
+    $("#btnScanVideoDir").addEventListener("click", () => {
+      if (!API.hasDesktop || !window.ttDesktop.scanVideoDir) { toast("浏览器预览不支持扫描磁盘目录，请用桌面版"); return; }
+      setNet("扫描视频中…");
+      window.ttDesktop.scanVideoDir().then((files) => {
+        setNet("就绪");
+        if (!files || !files.length) { toast("该目录下没有找到视频文件"); return; }
+        importVideos(files, true);
+      });
+    });
+    $("#btnClearVideo").addEventListener("click", () => {
+      if (!confirm("确定清空视频列表吗？不会删除磁盘文件。")) return;
+      exitVideo();
+      state.videos = [];
+      persist(); updateBadges(); renderVideo(); toast("已清空视频列表");
+    });
+    // 视频舞台控件
+    $("#btnVideoFull").addEventListener("click", () => TV.toggleFullscreen());
+    $("#btnVideoPip").addEventListener("click", () => TV.togglePip());
+    $("#videoRate").addEventListener("change", (e) => {
+      TV.setRate(parseFloat(e.target.value));
+      toast("倍速 " + e.target.value + "×");
+    });
+    $("#videoStage").addEventListener("dblclick", (e) => {
+      if (e.target.closest(".vctrl")) return;
+      TV.toggleFullscreen();
+    });
+
     // 拖拽导入
     let dragDepth = 0;
     window.addEventListener("dragenter", (e) => { e.preventDefault(); dragDepth++; $("#dropMask").classList.add("show"); });
@@ -609,8 +853,13 @@
       dragDepth = 0;
       $("#dropMask").classList.remove("show");
       if (!e.dataTransfer) return;
-      const files = e.dataTransfer.files;
-      if (files && files.length) importFiles(files);
+      const all = Array.prototype.slice.call(e.dataTransfer.files || []);
+      if (!all.length) return;
+      const videos = all.filter((f) => VIDEO_RE.test(f.name) || (f.type || "").indexOf("video") === 0);
+      const audios = all.filter((f) => videos.indexOf(f) < 0);
+      if (videos.length) importVideos(videos);
+      if (audios.length) importFiles(audios);
+      if (!videos.length && !audios.length) toast("没有可导入的音频或视频文件");
     });
 
     // 搜索
@@ -634,21 +883,26 @@
     // 设置
     $("#btnTheme").addEventListener("click", () => { state.theme = state.theme === "light" ? "dark" : "light"; applyTheme(); persist(); });
     $("#btnMode").addEventListener("click", cycleMode);
-    $("#volRange").addEventListener("input", (e) => { state.volume = e.target.value / 100; E.setVolume(state.volume); $("#volText").textContent = e.target.value + "%"; persist(); });
+    $("#volRange").addEventListener("input", (e) => setVolume(e.target.value / 100));
     $("#swAutoLrc").addEventListener("click", () => { state.autoLrc = !state.autoLrc; $("#swAutoLrc").classList.toggle("on", state.autoLrc); persist(); });
     $("#swAutoPlay").addEventListener("click", () => toast("该功能仅桌面版可用"));
-    $("#btnAbout").addEventListener("click", () => toast("天天音乐 1.0.0 · 本地播放 + 开放版权曲库 + 歌词同步", 3200));
+    $("#btnAbout").addEventListener("click", () => toast("天天音乐 1.1.0 · 本地播放 + 视频播放 + 开放版权曲库 + 歌词同步", 3200));
 
     // 快捷键
     window.addEventListener("keydown", (e) => {
-      if (/^(INPUT|TEXTAREA)$/.test(e.target.tagName)) return;
-      if (e.code === "Space") { e.preventDefault(); if (E.getTrack()) E.toggle(); else playTrack(L.DEMO_TRACKS[0], L.DEMO_TRACKS.slice(0, 6), 0); }
+      if (/^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return;
+      if (e.code === "Space") {
+        e.preventDefault();
+        if (videoMode || E.getTrack()) playerToggle();
+        else playTrack(L.DEMO_TRACKS[0], L.DEMO_TRACKS.slice(0, 6), 0);
+      }
       else if (e.code === "ArrowRight" && e.ctrlKey) next(false);
       else if (e.code === "ArrowLeft" && e.ctrlKey) prev();
-      else if (e.code === "ArrowRight") E.seek(E.currentTime() + 5);
-      else if (e.code === "ArrowLeft") E.seek(E.currentTime() - 5);
-      else if (e.code === "ArrowUp") { state.volume = Math.min(1, state.volume + 0.05); E.setVolume(state.volume); persist(); renderSetting(); }
-      else if (e.code === "ArrowDown") { state.volume = Math.max(0, state.volume - 0.05); E.setVolume(state.volume); persist(); renderSetting(); }
+      else if (e.code === "ArrowRight") playerSeek(playerCurrent() + 5);
+      else if (e.code === "ArrowLeft") playerSeek(playerCurrent() - 5);
+      else if (e.code === "ArrowUp") setVolume(state.volume + 0.05);
+      else if (e.code === "ArrowDown") setVolume(state.volume - 0.05);
+      else if (e.code === "KeyF" && videoMode) TV.toggleFullscreen();
       else if (e.code === "Escape") $("#nowPanel").classList.remove("show");
     });
 
@@ -660,18 +914,33 @@
       $("#winClose").addEventListener("click", () => window.ttDesktop.win("close"));
     }
 
-    // 引擎事件
-    E.on("play", () => { $("#iconPlay").innerHTML = '<path d="M7 5h4v14H7V5zm6 0h4v14h-4V5z"/>'; renderQueue(); refreshPlayingRows(); });
-    E.on("pause", () => { $("#iconPlay").innerHTML = '<path d="M8 5l12 7-12 7V5z"/>'; });
-    E.on("error", (err) => toast(err.message || "播放出错"));
-    E.on("ended", () => next(true));
-    E.on("timeupdate", (d) => {
+    // 引擎事件（音频 + 视频统一处理）
+    const PLAY_PATH = "M8 5l12 7-12 7V5z";
+    const PAUSE_PATH = "M7 5h4v14H7V5zm6 0h4v14h-4V5z";
+    function onPlay() {
+      $("#iconPlay").innerHTML = '<path d="' + PAUSE_PATH + '"/>';
+      $("#player").classList.add("playing");
+      renderQueue();
+      refreshPlayingRows();
+    }
+    function onPause() { $("#iconPlay").innerHTML = '<path d="' + PLAY_PATH + '"/>'; }
+    function onTime(d) {
       $("#tCur").textContent = L.fmtTime(d.current);
       $("#tDur").textContent = L.fmtTime(d.duration);
       $("#fillProgress").style.width = d.duration ? (d.current / d.duration) * 100 + "%" : "0%";
-      syncLyrics(d.current);
+      if (!videoMode) syncLyrics(d.current);
+    }
+    [E, TV].forEach((P) => {
+      P.on("play", onPlay);
+      P.on("pause", onPause);
+      P.on("ended", () => next(true));
+      P.on("error", (err) => toast((err && err.message) || "播放出错"));
+      P.on("timeupdate", onTime);
+      P.on("loaded", (d) => { if (d.duration) $("#tDur").textContent = L.fmtTime(d.duration); });
     });
-    E.on("loaded", (d) => { if (d.duration) $("#tDur").textContent = L.fmtTime(d.duration); });
+    TV.on("rate", (r) => { const s = $("#videoRate"); if (s) s.value = String(r); });
+    TV.on("fullscreenerror", (msg) => toast(msg || "全屏不可用"));
+    TV.on("piperror", (msg) => toast(msg || "画中画不可用"));
 
     // 频谱动画
     const vis = $("#visualizer");
@@ -700,7 +969,7 @@
     });
   }
   function toggleFav(list, idx) {
-    const map = { favorite: state.favorites, local: state.local, recent: state.recent, daily: L.DEMO_TRACKS.slice(0, 6), online: onlineResults };
+    const map = { favorite: state.favorites, local: state.local, recent: state.recent, daily: L.DEMO_TRACKS.slice(0, 6), online: onlineResults, video: state.videos };
     let t = map[list] && map[list][idx];
     if (!t && list && list.indexOf("rank:") === 0) {
       const r = L.RANKS.find((x) => x.name === list.slice(5));
@@ -717,12 +986,12 @@
       toast("已加入收藏");
     }
     persist(); updateBadges(); refreshPlayingRows();
-    const cur = E.getTrack();
+    const cur = videoMode ? TV.getTrack() : E.getTrack();
     if (cur) $("#pFav").classList.toggle("on", isFaved(cur));
     if ($("#view-favorite").classList.contains("active")) renderFavorite();
     $$(".row").forEach((row) => {
       const list = row.dataset.list, idx = parseInt(row.dataset.idx, 10);
-      const map = { favorite: state.favorites, local: state.local, recent: state.recent, daily: L.DEMO_TRACKS.slice(0, 6), online: onlineResults };
+      const map = { favorite: state.favorites, local: state.local, recent: state.recent, daily: L.DEMO_TRACKS.slice(0, 6), online: onlineResults, video: state.videos };
       let t = map[list] && map[list][idx];
       if (!t && list && list.indexOf("rank:") === 0) {
         const r = L.RANKS.find((x) => x.name === list.slice(5));
@@ -735,6 +1004,7 @@
   function removeFrom(list, idx) {
     if (list === "local") { state.local.splice(idx, 1); persist(); updateBadges(); renderLocal(); toast("已从列表移除"); }
     else if (list === "favorite") { state.favorites.splice(idx, 1); persist(); updateBadges(); renderFavorite(); toast("已取消收藏"); }
+    else if (list === "video") { state.videos.splice(idx, 1); persist(); updateBadges(); renderVideo(); toast("已从视频列表移除"); }
   }
   function pickLrcFile() {
     const inp = document.createElement("input");
@@ -761,16 +1031,29 @@
   /* ---------------- 初始化 ---------------- */
   function init() {
     applyTheme();
-    E.setVolume(state.volume);
+    // blob: 的 URL 重启后失效，过滤掉（桌面版导入的是 file:// 可持久保留）
+    const deadVideos = state.videos.filter((v) => v.url && v.url.indexOf("blob:") === 0).length;
+    if (deadVideos) {
+      state.videos = state.videos.filter((v) => !(v.url && v.url.indexOf("blob:") === 0));
+      persist();
+    }
+    const deadAudio = state.local.filter((v) => v.url && v.url.indexOf("blob:") === 0).length;
+    if (deadAudio) {
+      state.local = state.local.filter((v) => !(v.url && v.url.indexOf("blob:") === 0));
+      persist();
+    }
+    lastVolume = state.volume > 0.001 ? state.volume : 0.7;
+    setVolume(state.volume, { persist: false });
     updateBadges();
     bind();
     switchView("discover", false);
+    renderVideo();
     renderQueue();
     renderDownload();
     // 恢复"最近播放"到队列
     if (state.recent.length) { playlist = state.recent.slice(); currentIndex = -1; renderQueue(); }
     setNet(API.hasDesktop ? "桌面版" : "浏览器预览");
-    console.log("天天音乐已启动", { desktop: API.hasDesktop, demo: L.DEMO_TRACKS.length });
+    console.log("天天音乐已启动", { desktop: API.hasDesktop, demo: L.DEMO_TRACKS.length, videos: state.videos.length });
   }
   document.addEventListener("DOMContentLoaded", init);
 })();

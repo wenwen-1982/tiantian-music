@@ -8,6 +8,8 @@ contextBridge.exposeInMainWorld("ttDesktop", {
   chooseDir: () => ipcRenderer.invoke("tt-choose-dir"),
   defaultDir: () => ipcRenderer.invoke("tt-default-dir"),
   pickFiles: () => ipcRenderer.invoke("tt-pick-files"),
+  pickVideos: () => ipcRenderer.invoke("tt-pick-videos"),
   scanDir: () => ipcRenderer.invoke("tt-scan-dir"),
+  scanVideoDir: () => ipcRenderer.invoke("tt-scan-video-dir"),
   openPath: (p) => ipcRenderer.send("tt-open-path", p),
 });

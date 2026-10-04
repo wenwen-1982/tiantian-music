@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
 <meta charset="UTF-8">
@@ -55,13 +55,19 @@
         下载管理
       </div>
 
+      <div class="nav-group-title">视频</div>
+      <div class="nav-item" data-view="video">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 5.5h18a1 1 0 011 1v11a1 1 0 01-1 1H3a1 1 0 01-1-1v-11a1 1 0 011-1zm1 2v9h16v-9H4zm6 1.5l6 3-6 3v-6z"/></svg>
+        视频播放 <span class="badge" id="badgeVideo">0</span>
+      </div>
+
       <div class="nav-group-title">其他</div>
       <div class="nav-item" data-view="setting">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.9 4c0 .5 0 1-.1 1.4l2 1.5-2 3.4-2.4-1a7.6 7.6 0 01-2.4 1.4l-.4 2.6h-4l-.4-2.6a7.6 7.6 0 01-2.4-1.4l-2.4 1-2-3.4 2-1.5a8.7 8.7 0 010-2.8l-2-1.5 2-3.4 2.4 1A7.6 7.6 0 019 4.3L9.4 1.7h4l.4 2.6c.9.3 1.7.8 2.4 1.4l2.4-1 2 3.4-2 1.5c.1.5.1 1 .1 1.4z"/></svg>
         设置
       </div>
       <div style="flex:1"></div>
-      <div style="color:var(--text-3);font-size:11.5px;padding:8px 12px 0">版本 1.0.0 · 桌面版</div>
+      <div style="color:var(--text-3);font-size:11.5px;padding:8px 12px 0">版本 1.1.0 · 桌面版</div>
     </aside>
 
     <!-- 主区 -->
@@ -150,6 +156,45 @@
           <div class="list" id="listDownload"></div>
         </section>
 
+        <!-- 视频播放 -->
+        <section class="view" id="view-video">
+          <div class="page-title">视频播放</div>
+          <div class="page-sub">支持 mp4 / webm / mkv / mov / m4v 等（依赖 Chromium 内置解码器，avi / wmv / flv 等老格式可能无法播放）；也可直接把视频文件拖进窗口</div>
+          <div class="toolbar">
+            <button class="btn primary" id="btnImportVideo">导入视频</button>
+            <button class="btn" id="btnImportVideoDir">导入文件夹</button>
+            <button class="btn" id="btnScanVideoDir">扫描子目录</button>
+            <button class="btn" id="btnClearVideo">清空列表</button>
+            <span style="color:var(--text-3);font-size:12px" id="videoTip"></span>
+          </div>
+
+          <div class="video-stage" id="videoStage">
+            <video id="videoEl" playsinline preload="metadata"></video>
+            <div class="vstage-empty" id="vstageEmpty">
+              <div class="big">🎬</div>
+              <div>还没有播放视频，从下方列表选一个开始</div>
+            </div>
+            <div class="vctrl" id="videoCtrl">
+              <span class="vt" id="vTitle">未在播放</span>
+              <span class="sp"></span>
+              <label class="vsel">倍速
+                <select id="videoRate">
+                  <option value="0.5">0.5×</option>
+                  <option value="0.75">0.75×</option>
+                  <option value="1" selected>1.0×</option>
+                  <option value="1.25">1.25×</option>
+                  <option value="1.5">1.5×</option>
+                  <option value="2">2.0×</option>
+                </select>
+              </label>
+              <button class="vbtn" id="btnVideoPip" title="画中画">⧉</button>
+              <button class="vbtn" id="btnVideoFull" title="全屏（双击画面也可）">⛶</button>
+            </div>
+          </div>
+
+          <div class="list" id="listVideo"></div>
+        </section>
+
         <!-- 设置 -->
         <section class="view" id="view-setting">
           <div class="page-title">设置</div>
@@ -180,7 +225,7 @@
             <div class="switch" id="swAutoPlay"></div>
           </div>
           <div class="setting-row">
-            <div class="lbl">关于天天音乐<small>版本 1.0.0 · 本地 + 开放版权曲库播放器 · 界面风格致敬方格音乐</small></div>
+            <div class="lbl">关于天天音乐<small>版本 1.1.0 · 一款开源的桌面音乐播放器：本地音乐 + 视频 + 开放版权曲库 + 歌词</small></div>
             <div><button class="btn" id="btnAbout">查看说明</button></div>
           </div>
         </section>
@@ -233,6 +278,7 @@
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M5 9h3l4-4v14l-4-4H5V9zm11-1a4 4 0 010 8v-2a2 2 0 000-4V8z"/></svg>
       </button>
       <div class="bar vol" id="barVolume"><div class="fill" id="fillVolume"></div></div>
+      <span class="volpct" id="volPct">70%</span>
     </div>
 
     <div id="queueDrawer">
@@ -253,13 +299,16 @@
   <div id="lyrics"></div>
 </div>
 
-<div id="dropMask"><div style="font-size:40px">🎵</div><div>松开鼠标，导入音频文件</div></div>
+<div id="dropMask"><div style="font-size:40px">🎵</div><div>松开鼠标，导入音频 / 视频文件</div></div>
 <div id="toast"></div>
 
 <input type="file" id="filePicker" accept="audio/*,.mp3,.flac,.m4a,.wav,.ogg,.aac" multiple style="display:none">
 <input type="file" id="dirPicker" webkitdirectory directory multiple style="display:none">
+<input type="file" id="videoPicker" accept="video/*,.mp4,.webm,.mkv,.mov,.m4v,.avi,.flv,.wmv,.ts,.mpg,.mpeg" multiple style="display:none">
+<input type="file" id="videoDirPicker" webkitdirectory directory multiple style="display:none">
 
 <script src="assets/js/engine.js"></script>
+<script src="assets/js/video.js"></script>
 <script src="assets/js/library.js"></script>
 <script src="assets/js/api.js"></script>
 <script src="assets/js/app.js"></script>

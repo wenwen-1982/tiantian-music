@@ -59,37 +59,58 @@ ipcMain.on("tt-open-path", (e, p) => { if (p) shell.openPath(p); });
 
 /* ---------------- 文件选择 / 目录扫描 ---------------- */
 const AUDIO_RE = /\.(mp3|flac|m4a|wav|ogg|aac|opus)$/i;
+const VIDEO_RE = /\.(mp4|webm|mkv|mov|m4v|avi|flv|wmv|mpg|mpeg|ts|3gp)$/i;
 function toFileUrl(p) {
   let u = p.replace(/\\/g, "/");
   if (!u.startsWith("/")) u = "/" + u;
   return "file://" + u.split("/").map(encodeURIComponent).join("/").replace(/%3A/g, ":");
 }
-
-ipcMain.handle("tt-pick-files", async () => {
-  const r = await dialog.showOpenDialog(win, {
-    properties: ["openFile", "multiSelections"],
-    filters: [{ name: "音频文件", extensions: ["mp3", "flac", "m4a", "wav", "ogg", "aac", "opus"] }],
-  });
-  if (r.canceled) return [];
-  return r.filePaths.map((p) => ({ path: p, name: path.basename(p), url: toFileUrl(p) }));
-});
-
-ipcMain.handle("tt-scan-dir", async () => {
-  const r = await dialog.showOpenDialog(win, { properties: ["openDirectory"] });
-  if (r.canceled) return [];
-  const root = r.filePaths[0];
+function fileEntry(p) {
+  let size = 0;
+  try { size = fs.statSync(p).size; } catch (e) {}
+  return { path: p, name: path.basename(p), url: toFileUrl(p), size };
+}
+function pickDialog(title, filters) {
+  return dialog.showOpenDialog(win, { title, properties: ["openFile", "multiSelections"], filters });
+}
+// 递归收集目录下匹配的文件
+function walkCollect(root, re, limit, depthMax) {
   const out = [];
   (function walk(dir, depth) {
-    if (depth > 6 || out.length > 2000) return;
+    if (depth > (depthMax || 6) || out.length > (limit || 2000)) return;
     let items = [];
     try { items = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
     for (const it of items) {
       const full = path.join(dir, it.name);
       if (it.isDirectory()) walk(full, depth + 1);
-      else if (AUDIO_RE.test(it.name)) out.push({ path: full, name: it.name, url: toFileUrl(full) });
+      else if (re.test(it.name)) out.push(fileEntry(full));
     }
   })(root, 0);
   return out;
+}
+
+ipcMain.handle("tt-pick-files", async () => {
+  const r = await pickDialog("选择音频文件", [{ name: "音频文件", extensions: ["mp3", "flac", "m4a", "wav", "ogg", "aac", "opus"] }]);
+  if (r.canceled) return [];
+  return r.filePaths.map(fileEntry);
+});
+
+ipcMain.handle("tt-pick-videos", async () => {
+  const r = await pickDialog("选择视频文件", [{ name: "视频文件", extensions: ["mp4", "webm", "mkv", "mov", "m4v", "avi", "flv", "wmv", "mpg", "mpeg", "ts", "3gp"] }]);
+  if (r.canceled) return [];
+  return r.filePaths.map(fileEntry);
+});
+
+ipcMain.handle("tt-scan-dir", async () => {
+  const r = await dialog.showOpenDialog(win, { properties: ["openDirectory"], title: "选择要扫描的音乐目录" });
+  if (r.canceled) return [];
+  return walkCollect(r.filePaths[0], AUDIO_RE, 2000);
+});
+
+ipcMain.handle("tt-scan-video-dir", async () => {
+  const r = await dialog.showOpenDialog(win, { properties: ["openDirectory"], title: "选择要扫描的视频目录" });
+  if (r.canceled) return [];
+  return walkCollect(r.filePaths[0], VIDEO_RE, 2000);
 });
 
 /* ---------------- 下载（带进度） ---------------- */
