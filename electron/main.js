@@ -4,6 +4,7 @@ const fs = require("fs");
 const https = require("https");
 const http = require("http");
 const { URL } = require("url");
+const TT = require("./transcode");
 
 // 部分显卡/虚拟机环境下 GPU 进程不可用，禁用硬件加速以保证可启动
 app.disableHardwareAcceleration();
@@ -111,6 +112,19 @@ ipcMain.handle("tt-scan-video-dir", async () => {
   const r = await dialog.showOpenDialog(win, { properties: ["openDirectory"], title: "选择要扫描的视频目录" });
   if (r.canceled) return [];
   return walkCollect(r.filePaths[0], VIDEO_RE, 2000);
+});
+
+/* ---------------- 老格式视频转码 ---------------- */
+ipcMain.handle("tt-has-ffmpeg", () => TT.hasFfmpeg());
+ipcMain.handle("tt-transcode", async (e, file) => {
+  try {
+    const r = await TT.transcode(file, (p) => {
+      if (win) win.webContents.send("tt-transcode-progress", p);
+    });
+    return r;
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
 });
 
 /* ---------------- 下载（带进度） ---------------- */

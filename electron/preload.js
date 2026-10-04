@@ -12,4 +12,7 @@ contextBridge.exposeInMainWorld("ttDesktop", {
   scanDir: () => ipcRenderer.invoke("tt-scan-dir"),
   scanVideoDir: () => ipcRenderer.invoke("tt-scan-video-dir"),
   openPath: (p) => ipcRenderer.send("tt-open-path", p),
+  hasFfmpeg: () => ipcRenderer.invoke("tt-has-ffmpeg"),
+  transcode: (file) => ipcRenderer.invoke("tt-transcode", file),
+  onTranscode: (cb) => ipcRenderer.on("tt-transcode-progress", (e, p) => cb(p)),
 });

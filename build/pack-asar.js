@@ -23,6 +23,7 @@ const TEXT_FILES = [
   "assets/icon.png",
   "electron/main.js",
   "electron/preload.js",
+  "electron/transcode.js",
 ];
 
 function stripBom(buf, name) {

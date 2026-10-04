@@ -18,7 +18,8 @@
 |---|---|
 | 内置示例曲库 | 8 首合成器曲目由 WebAudio 实时生成（无需任何音频文件即可试听），含推荐歌单、排行榜 |
 | 本地音乐 | 导入文件 / 文件夹 / 拖拽入窗口；自动解析 MP3 ID3v2 标签与内嵌封面 |
-| 视频播放 | mp4 / webm / mkv / mov 等本地视频，独立视频页（双击全屏、画中画、0.5–2.0× 倍速），拖拽即导入，自动探测时长 |
+| 视频播放 | mp4 / webm / mkv / mov / m4v 直接播；avi / wmv / flv / rmvb / mpg / vob 等老格式首次播放时自动转 MP4（优先 `-c copy` 换容器，秒级无损；老编码才转 H.264 + AAC），结果按文件指纹缓存，下次直接播放 |
+| 老格式支持 | 依赖内置 ffmpeg.exe（61.5 MB，GPL 精简构建）。安装目录 `resources\ffmpeg.exe`；缺失时老格式会提示转换失败，其余功能不受影响 |
 | 进度条 | 播放条、视频画面（含全屏）、画中画悬浮条三处均带可拖动进度条与时间显示；画中画窗口内无法注入界面，故悬浮条常驻应用底部 |
 | 歌词 | LRC 解析 + 逐行高亮卡拉OK式滚动；LRCLIB 联网匹配；支持手动导入 .lrc |
 | 在线曲库 | ccMixter（CC 授权）搜索、在线播放、下载到本地；桌面版带进度显示 |
@@ -55,12 +56,22 @@ npm start          # 启动桌面版
 ## 打包 Windows 免安装版
 
 ```bash
-npm run dist       # electron-builder → 便携版 exe
+npm run fetch-ffmpeg     # 下载精简 ffmpeg.exe（61.5 MB）到 build/（仓库不含该二进制）
+npm run dist             # electron-builder → 便携版 exe
 ```
 
 产物为绿色免安装目录 / 单文件 exe，双击 `天天音乐.exe` 即可运行。已发布的成品见上方 [下载](#下载windows-免安装版)。
 
-> 若网络无法直连 npm 的 Electron 二进制源，可先手动下载 `electron-v31.7.7-win32-x64.zip`（如 npmmirror 镜像），解压后将本项目代码打成 `resources/app.asar`（推荐用 `@electron/asar` 的 `createPackage` API），并把 `electron.exe` 重命名为 `天天音乐.exe` 即可得到便携版。
+> 若网络无法直连 npm 的 Electron 二进制源，可先手动下载 `electron-v31.7.7-win32-x64.zip`（如 npmmirror 镜像），解压后：
+>
+> ```bash
+> npm run pack                       # 用 @electron/asar 打出 app.asar（自动剥离 BOM）
+> node build/deploy.js "D:\天天音乐"  # 同步 app.asar + ffmpeg.exe 到安装目录
+> ```
+>
+> 再把 `electron.exe` 重命名为 `天天音乐.exe` 即可得到便携版。
+>
+> **ffmpeg.exe 必须放在 `resources\` 目录（与 `app.asar` 同级），不能打进 asar** —— asar 内的二进制无法被 `child_process` 直接执行。查找顺序为：`resources\ffmpeg.exe` → 应用根目录 → `build\ffmpeg.exe` → 系统 PATH。
 
 ## 目录结构
 
@@ -78,8 +89,13 @@ tiantian-music/
 │       └── app.js        # 界面状态与交互
 ├── electron/
 │   ├── main.js           # 主进程（窗口 / 下载 / 文件扫描）
+│   ├── transcode.js      # ffmpeg 转码（老格式 → MP4，带缓存与进度）
 │   └── preload.js        # contextBridge 桥接
-├── build/icon.ico        # Windows 打包图标（多尺寸）
+├── build/
+│   ├── icon.ico          # Windows 打包图标（多尺寸）
+│   ├── pack-asar.js      # 打 app.asar（剥 BOM 并校验 package.json）
+│   ├── fetch-ffmpeg.js   # 下载精简 ffmpeg.exe
+│   └── deploy.js         # 同步 app.asar + ffmpeg.exe 到安装目录
 └── preview/              # 运行截图
 ```
 

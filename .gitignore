@@ -7,6 +7,10 @@ release/
 dist/
 out/
 
+# ffmpeg 二进制（61 MB，用 npm run fetch-ffmpeg 下载，不进仓库）
+build/ffmpeg.exe
+build/ffmpeg.tgz
+
 # 运行时与缓存
 *.log
 npm-debug.log*

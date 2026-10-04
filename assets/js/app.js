@@ -318,7 +318,7 @@
     else { currentIndex = playlist.findIndex((t) => sameSong(t, track)); }
 
     if (track.kind === "video") {
-      enterVideo(track);
+      playVideo(track);
     } else {
       exitVideo();
       E.load(track, { autoplay: true });
@@ -330,6 +330,10 @@
     refreshPlayingRows();
     $("#player").classList.add("playing");
     setNet(track.kind === "video" ? "视频播放" : track.source === "ccmixter" ? "在线播放" : "本地播放");
+  }
+  async function playVideo(track) {
+    const t2 = await prepareVideo(track);
+    enterVideo(t2);
   }
   function enterVideo(track) {
     videoMode = true;
@@ -568,16 +572,51 @@
   }
 
   /* ---------------- 视频导入 ---------------- */
-  const VIDEO_RE = /\.(mp4|webm|mkv|mov|m4v|avi|flv|wmv|mpg|mpeg|ts|3gp)$/i;
+  const VIDEO_RE = /\.(mp4|webm|mkv|mov|m4v|avi|flv|f4v|wmv|mpg|mpeg|mpe|vob|asf|rm|rmvb|ts|mts|m2ts|3gp|3g2|ogv)$/i;
+  // Chromium 解不了的格式：播放前用 ffmpeg 转成 mp4
+  const TC_RE = /\.(avi|wmv|flv|f4v|swf|rm|rmvb|mpg|mpeg|mpe|m1v|m2v|vob|asf|3gp|3g2|mts|m2ts|dat|ogv)$/i;
+  function needsTranscode(t) {
+    if (!t || t._tcUrl) return false;
+    return TC_RE.test(String(t.path || t.fileName || t.url || "").split("?")[0]);
+  }
+  async function prepareVideo(track) {
+    if (!needsTranscode(track)) return track;
+    if (!API.hasDesktop || !window.ttDesktop.transcode) {
+      toast("浏览器预览无法转换格式，请用桌面版播放该文件");
+      return track;
+    }
+    setNet("转换格式中…");
+    try {
+      const r = await window.ttDesktop.transcode(track.path || track.url);
+      if (!r || !r.ok) {
+        toast("格式转换失败：" + ((r && r.error) || "未知错误"));
+        return track;
+      }
+      track._tcUrl = r.url;
+      track._tcMode = r.mode || "";
+      if (!r.cached) toast(r.mode === "copy" ? "已转换容器（无损）" : "已转码为 MP4，下次播放直接用缓存");
+      return Object.assign({}, track, { url: r.url });
+    } finally {
+      setNet("视频播放");
+    }
+  }
 
+  // 桌面版下 File 对象带 path（Electron 特性），用它构造 file:// 地址，
+  // 这样 ffmpeg 才能拿到真实路径去转换 avi / wmv / flv 等老格式
+  function localFileUrl(p) {
+    let s = String(p || "").replace(/\\/g, "/").replace(/\/{2,}/g, "/").replace(/^\//, "");
+    return "file:///" + encodeURI(s).replace(/%23/g, "#");
+  }
   function makeVideoTrack(file) {
+    const p = file.path ? String(file.path).replace(/\\/g, "/").replace(/\/{2,}/g, "/") : "";
     return {
-      id: "video-" + file.name + "-" + (file.size || 0) + "-" + (file.lastModified || 0),
+      id: "video-" + (p || file.name) + "-" + (file.size || 0),
       title: file.name.replace(/\.[^.]+$/, ""),
       artist: "本地视频",
       album: "本地视频",
       kind: "video",
-      url: URL.createObjectURL(file),
+      url: p ? localFileUrl(p) : URL.createObjectURL(file),
+      path: p || "",
       fileName: file.name,
       size: file.size || 0,
     };
@@ -915,7 +954,7 @@
     $("#volRange").addEventListener("input", (e) => setVolume(e.target.value / 100));
     $("#swAutoLrc").addEventListener("click", () => { state.autoLrc = !state.autoLrc; $("#swAutoLrc").classList.toggle("on", state.autoLrc); persist(); });
     $("#swAutoPlay").addEventListener("click", () => toast("该功能仅桌面版可用"));
-    $("#btnAbout").addEventListener("click", () => toast("天天音乐 1.1.1 · 本地播放 + 视频播放 + 开放版权曲库 + 歌词同步", 3200));
+    $("#btnAbout").addEventListener("click", () => toast("天天音乐 1.2.0 · 本地播放 + 视频播放 + 开放版权曲库 + 歌词同步", 3200));
 
     // 快捷键
     window.addEventListener("keydown", (e) => {
@@ -982,10 +1021,25 @@
       P.on("play", onPlay);
       P.on("pause", onPause);
       P.on("ended", () => next(true));
-      P.on("error", (err) => toast((err && err.message) || "播放出错"));
       P.on("timeupdate", onTime);
       P.on("loaded", (d) => { if (d.duration) $("#tDur").textContent = L.fmtTime(d.duration); });
     });
+    E.on("error", (err) => toast((err && err.message) || "播放出错"));
+    // 视频解码失败时（mkv / mov 里装了老编码等情况）自动转码后重试一次
+    TV.on("error", async (err) => {
+      const t = TV.getTrack();
+      if (t && !t._tcTried && (t.path || /^file:/i.test(t.url || ""))) {
+        t._tcTried = true;
+        const t2 = await prepareVideo(t);
+        if (t2 !== t) { TV.load(t2, { autoplay: true }); return; }
+      }
+      toast((err && err.message) || "播放出错");
+    });
+    if (API.hasDesktop && window.ttDesktop.onTranscode) {
+      window.ttDesktop.onTranscode((p) => {
+        if (p && typeof p.pct === "number" && p.pct < 100) setNet("转换格式中 " + p.pct + "%");
+      });
+    }
     TV.on("rate", (r) => { const s = $("#videoRate"); if (s) s.value = String(r); });
     TV.on("fullscreenerror", (msg) => toast(msg || "全屏不可用"));
     TV.on("piperror", (msg) => toast(msg || "画中画不可用"));
