@@ -8,6 +8,7 @@
 
 | 版本 | 文件 | 说明 |
 |---|---|---|
+| v1.3.0 | [TianTianMusic-v1.3.0-win64.zip](https://github.com/wenwen-1982/tiantian-music/releases/download/v1.3.0/TianTianMusic-v1.3.0-win64.zip) | Windows 10/11 64 位，126.8 MB。解压后双击 `天天音乐.exe` 即可运行；再到「设置 → 安装到本机」即可关联文件类型 |
 | v1.0.0 | [TianTianMusic-v1.0.0-win64.zip](https://github.com/wenwen-1982/tiantian-music/releases/download/v1.0.0/TianTianMusic-v1.0.0-win64.zip) | Windows 10/11 64 位绿色版，105.6 MB，解压后双击 `天天音乐.exe` 即可运行，无需安装 |
 
 全部版本见 [Releases](https://github.com/wenwen-1982/tiantian-music/releases)。
