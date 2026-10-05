@@ -13,6 +13,7 @@ const OUT = path.join(process.env.TEMP || "/tmp", "tt_app.asar");
 
 const TEXT_FILES = [
   "index.html",
+  "installer.html",
   "package.json",
   "assets/css/style.css",
   "assets/js/app.js",
@@ -20,10 +21,13 @@ const TEXT_FILES = [
   "assets/js/engine.js",
   "assets/js/library.js",
   "assets/js/video.js",
+  "assets/js/installer.js",
   "assets/icon.png",
   "electron/main.js",
   "electron/preload.js",
   "electron/transcode.js",
+  "electron/assoc.js",
+  "electron/installer.js",
 ];
 
 function stripBom(buf, name) {

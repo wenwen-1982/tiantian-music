@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>天天音乐 · 安装</title>
+<link rel="stylesheet" href="assets/css/style.css">
+</head>
+<body>
+<div id="installer">
+
+  <header id="titlebar">
+    <div class="brand"><span class="dot">TT</span> <span id="insTitle">安装 天天音乐</span></div>
+    <span class="spacer"></span>
+    <div id="winControls">
+      <button id="winMin" title="最小化">─</button>
+      <button id="winClose" class="close" title="关闭">✕</button>
+    </div>
+  </header>
+
+  <div class="ins-body">
+
+    <!-- 安装：配置 -->
+    <section id="stepSetup">
+      <div class="ins-hero">
+        <div class="ins-logo">TT</div>
+        <div>
+          <h1 id="heroTitle">安装 天天音乐</h1>
+          <p class="ins-sub" id="heroSub">安装到本机后，可在资源管理器中双击音乐 / 视频文件直接播放</p>
+        </div>
+      </div>
+
+      <div class="ins-field">
+        <label>安装位置</label>
+        <div class="ins-row">
+          <input id="insDir" type="text" spellcheck="false">
+          <button class="btn" id="btnBrowse">浏览…</button>
+        </div>
+        <div class="ins-hint" id="dirHint"></div>
+      </div>
+
+      <div class="ins-field">
+        <label>关联文件格式（双击即用它打开）</label>
+        <div class="ins-checks">
+          <label class="ins-check"><input type="checkbox" id="chkAudio" checked> 音频</label>
+          <label class="ins-check"><input type="checkbox" id="chkVideo" checked> 视频</label>
+        </div>
+        <div class="ins-exts" id="extPreview"></div>
+      </div>
+
+      <div class="ins-field">
+        <label class="ins-check"><input type="checkbox" id="chkDesktop" checked> 创建桌面快捷方式</label>
+        <div class="ins-hint">同时会在开始菜单创建「天天音乐」文件夹与卸载入口</div>
+      </div>
+
+      <div class="ins-actions">
+        <button class="btn" id="btnCancel">取消</button>
+        <button class="btn primary" id="btnInstall">立即安装</button>
+      </div>
+    </section>
+
+    <!-- 安装：进度 -->
+    <section id="stepProgress" style="display:none">
+      <div class="ins-hero">
+        <div class="ins-logo">TT</div>
+        <div>
+          <h1 id="progTitle">正在安装…</h1>
+          <p class="ins-sub" id="progSub">正在复制文件</p>
+        </div>
+      </div>
+      <div class="ins-bar"><div class="ins-bar-fill" id="progFill"></div></div>
+      <div class="ins-log" id="progLog"></div>
+    </section>
+
+    <!-- 安装：完成 -->
+    <section id="stepDone" style="display:none">
+      <div class="ins-hero">
+        <div class="ins-logo ok">✓</div>
+        <div>
+          <h1 id="doneTitle">安装完成</h1>
+          <p class="ins-sub" id="doneSub"></p>
+        </div>
+      </div>
+      <ol class="ins-steps" id="doneSteps"></ol>
+      <div class="ins-note">
+        Windows 不允许程序静默夺取默认播放器。点击下面的按钮，在打开的系统设置页里
+        选择「天天音乐」即可让它成为默认；未设置过的格式通常安装后就能直接双击打开。
+      </div>
+      <div class="ins-actions">
+        <button class="btn" id="btnOpenFolder">打开安装位置</button>
+        <button class="btn" id="btnSetDefault">在系统设置中设为默认</button>
+        <button class="btn primary" id="btnLaunch">启动天天音乐</button>
+      </div>
+    </section>
+
+    <!-- 卸载 -->
+    <section id="stepUninstall" style="display:none">
+      <div class="ins-hero">
+        <div class="ins-logo">TT</div>
+        <div>
+          <h1>卸载 天天音乐</h1>
+          <p class="ins-sub" id="uniSub">将删除程序文件、开始菜单快捷方式与文件关联</p>
+        </div>
+      </div>
+      <div class="ins-note" id="uniPath"></div>
+      <div class="ins-actions">
+        <button class="btn" id="btnUniCancel">取消</button>
+        <button class="btn danger" id="btnUninstall">确认卸载</button>
+      </div>
+      <div class="ins-log" id="uniLog" style="display:none"></div>
+    </section>
+
+  </div>
+</div>
+<script src="assets/js/installer.js"></script>
+</body>
+</html>

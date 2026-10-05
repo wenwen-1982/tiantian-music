@@ -691,6 +691,43 @@
     return added.length;
   }
 
+  /* ---------------- 从资源管理器 / 命令行打开 ----------------
+   * 安装版登记了文件关联后，双击音乐 / 视频文件时 Windows 会把路径
+   * 作为命令行参数传给本程序，主进程再通过 tt-open-files 转发到这里。
+   */
+  const LOCAL_AUDIO_RE = /\.(mp3|flac|m4a|wav|ogg|aac|opus|wma)$/i;
+  function trackFromPath(p) {
+    const name = String(p).split(/[\\/]/).pop() || p;
+    const url = localFileUrl(p);
+    if (VIDEO_RE.test(name)) {
+      return { id: "video-" + p, title: name.replace(/\.[^.]+$/, ""), artist: "本地视频", album: "本地视频",
+        kind: "video", url, path: p, fileName: name, size: 0 };
+    }
+    return { id: "local-" + p, title: name.replace(/\.[^.]+$/, ""), artist: "未知歌手", album: "本地文件",
+      kind: "file", url, path: p, fileName: name };
+  }
+  function openPaths(paths) {
+    const arr = (paths || []).filter((p) => LOCAL_AUDIO_RE.test(p) || VIDEO_RE.test(p));
+    if (!arr.length) { toast("不支持的文件类型"); return; }
+    const vids = [], auds = [];
+    for (const p of arr) {
+      const t = trackFromPath(p);
+      (t.kind === "video" ? vids : auds).push(t);
+    }
+    if (vids.length) {
+      state.videos = vids.concat(state.videos.filter((v) => !vids.some((x) => x.id === v.id)));
+      persist(); updateBadges(); renderVideo(); switchView("video");
+      playTrack(vids[0], state.videos, 0);
+      toast("正在打开 " + vids[0].fileName);
+    }
+    if (auds.length) {
+      state.local = auds.concat(state.local.filter((v) => !auds.some((x) => x.id === v.id)));
+      persist(); updateBadges(); renderLocal();
+      if (!vids.length) { switchView("local"); playTrack(auds[0], state.local, 0); }
+      toast("正在打开 " + auds[0].fileName);
+    }
+  }
+
   /* ---------------- 在线搜索 ---------------- */
   async function doOnlineSearch(q) {
     if (!q) return;
@@ -954,7 +991,7 @@
     $("#volRange").addEventListener("input", (e) => setVolume(e.target.value / 100));
     $("#swAutoLrc").addEventListener("click", () => { state.autoLrc = !state.autoLrc; $("#swAutoLrc").classList.toggle("on", state.autoLrc); persist(); });
     $("#swAutoPlay").addEventListener("click", () => toast("该功能仅桌面版可用"));
-    $("#btnAbout").addEventListener("click", () => toast("天天音乐 1.2.0 · 本地播放 + 视频播放 + 开放版权曲库 + 歌词同步", 3200));
+    $("#btnAbout").addEventListener("click", () => toast("天天音乐 1.3.0 · 本地播放 + 视频播放 + 开放版权曲库 + 歌词同步", 3200));
 
     // 快捷键
     window.addEventListener("keydown", (e) => {
@@ -980,6 +1017,42 @@
       $("#winMin").addEventListener("click", () => window.ttDesktop.win("min"));
       $("#winMax").addEventListener("click", () => window.ttDesktop.win("max"));
       $("#winClose").addEventListener("click", () => window.ttDesktop.win("close"));
+
+      // 安装版：从资源管理器双击文件打开（Windows 把路径作为命令行参数传入）
+      if (window.ttDesktop.onOpenFiles) {
+        window.ttDesktop.onOpenFiles((files) => { if (files && files.length) openPaths(files); });
+      }
+      if (window.ttDesktop.takePendingFiles) {
+        window.ttDesktop.takePendingFiles().then((f) => { if (f && f.length) openPaths(f); }).catch(() => {});
+      }
+    }
+
+    // 安装到本机 / 设为默认播放器
+    const btnInstallApp = $("#btnInstallApp");
+    const btnSetDefault = $("#btnSetDefault");
+    if (btnInstallApp) {
+      if (API.hasDesktop) {
+        btnInstallApp.addEventListener("click", () => window.ttDesktop.openInstaller());
+        btnSetDefault.addEventListener("click", () => window.ttDesktop.openDefaultApps());
+        if (window.ttDesktop.installerDefaults) {
+          window.ttDesktop.installerDefaults().then((r) => {
+            if (!r || !r.ok) return;
+            const d = r.info || {};
+            $("#installState").textContent = d.isInstalled
+              ? "已安装到 " + d.installedDir + " · 点右侧按钮可在系统设置里设为默认"
+              : "当前为绿色版；安装后可双击音乐 / 视频文件直接播放";
+            btnInstallApp.textContent = d.isInstalled ? "修复 / 重装" : "安装到本机";
+            if (!d.isInstalled && !localStorage.getItem("ttInstallHinted")) {
+              localStorage.setItem("ttInstallHinted", "1");
+              setTimeout(() => toast("提示：在「设置」里点「安装到本机」，安装后双击音乐 / 视频文件即可直接播放", 5200), 2600);
+            }
+          }).catch(() => {});
+        }
+      } else {
+        btnInstallApp.disabled = true;
+        btnSetDefault.disabled = true;
+        $("#installState").textContent = "仅在桌面版（exe）中可用";
+      }
     }
 
     // 引擎事件（音频 + 视频统一处理）

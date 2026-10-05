@@ -415,3 +415,58 @@ input, textarea { font: inherit; }
   width: 18px; height: 18px; border: 2px solid var(--bg-4); border-top-color: var(--accent);
   border-radius: 50%; animation: spin .8s linear infinite; display: inline-block;
 }
+
+/* ---------------- 安装 / 卸载窗口 ---------------- */
+#installer { height: 100%; display: flex; flex-direction: column; }
+#installer #winControls { display: flex; -webkit-app-region: no-drag; height: 44px; }
+#installer #winControls button {
+  width: 46px; height: 44px; border: 0; background: transparent; color: var(--text-2); cursor: pointer;
+}
+#installer #winControls button:hover { background: var(--bg-3); color: var(--text); }
+#installer #winControls button.close:hover { background: #d9534f; color: #fff; }
+.ins-body { flex: 1; overflow: auto; padding: 22px 26px 26px; }
+.ins-hero { display: flex; gap: 14px; align-items: center; margin-bottom: 20px; }
+.ins-logo {
+  width: 44px; height: 44px; border-radius: 12px; font-size: 15px; font-weight: bold; color: #fff;
+  background: linear-gradient(135deg, var(--accent-2), var(--accent));
+  display: flex; align-items: center; justify-content: center; flex: 0 0 44px;
+}
+.ins-logo.ok { background: linear-gradient(135deg, #4cc38a, #2f9e69); }
+.ins-hero h1 { font-size: 19px; font-weight: 600; }
+.ins-sub { color: var(--text-2); font-size: 12.5px; margin-top: 3px; }
+.ins-field { margin-bottom: 18px; }
+.ins-field > label { display: block; font-size: 12.5px; color: var(--text-2); margin-bottom: 7px; }
+.ins-row { display: flex; gap: 8px; }
+.ins-row input {
+  flex: 1; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+  background: var(--bg-3); color: var(--text); outline: none; font-size: 13px;
+}
+.ins-row input:focus { border-color: var(--accent); }
+.ins-hint { font-size: 11.5px; color: var(--text-3); margin-top: 6px; }
+.ins-checks { display: flex; gap: 18px; }
+.ins-check { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; color: var(--text); cursor: pointer; }
+.ins-check input { width: 15px; height: 15px; accent-color: var(--accent); cursor: pointer; }
+.ins-exts {
+  margin-top: 8px; padding: 9px 11px; border-radius: 8px; background: var(--bg-3);
+  color: var(--text-3); font-size: 11.5px; line-height: 1.9; word-break: break-all;
+}
+.ins-actions { display: flex; gap: 10px; justify-content: flex-end; margin-top: 22px; flex-wrap: wrap; }
+.btn.danger { background: #c0392b; border-color: #c0392b; color: #fff; }
+.btn.danger:hover { background: #d9534f; border-color: #d9534f; color: #fff; }
+.btn:disabled { opacity: .55; cursor: default; }
+.ins-bar { height: 8px; border-radius: 4px; background: var(--bg-3); overflow: hidden; }
+.ins-bar-fill {
+  height: 100%; width: 0; border-radius: 4px;
+  background: linear-gradient(90deg, var(--accent), var(--accent-2)); transition: width .2s;
+}
+.ins-log {
+  margin-top: 14px; max-height: 150px; overflow: auto; padding: 10px 12px;
+  border-radius: 8px; background: var(--bg-3); color: var(--text-3);
+  font-size: 11.5px; line-height: 1.8; font-family: Consolas, monospace;
+}
+.ins-log-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ins-note {
+  margin-top: 14px; padding: 11px 13px; border-radius: 8px; font-size: 12px; line-height: 1.8;
+  background: var(--accent-soft); color: var(--text-2); border: 1px solid var(--line);
+}
+.ins-steps { margin: 4px 0 0 18px; font-size: 12.5px; color: var(--text-2); line-height: 2; }

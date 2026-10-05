@@ -5,12 +5,46 @@ const https = require("https");
 const http = require("http");
 const { URL } = require("url");
 const TT = require("./transcode");
+const IN = require("./installer");
 
 // 部分显卡/虚拟机环境下 GPU 进程不可用，禁用硬件加速以保证可启动
 app.disableHardwareAcceleration();
 
-let win = null;
+let win = null;          // 主窗口
+let instWin = null;      // 安装 / 卸载窗口
 const UA = { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36" };
+
+/* ---------------- 命令行参数 ----------------
+ * 双击关联文件启动时，Windows 会把文件路径作为命令行参数传进来。
+ * 例：天天音乐.exe "D:\Music\a.mp3"
+ */
+function isFileArg(a) {
+  if (!a || typeof a !== "string" || a.charAt(0) === "-") return false;
+  if (/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(a) && !/^[a-zA-Z]:[\\/]/.test(a)) return false; // 排除 URL
+  try { return fs.statSync(a).isFile(); } catch (e) { return false; }
+}
+function extractFiles(argv) {
+  const out = [];
+  for (const a of argv.slice(1)) if (isFileArg(a)) out.push(path.resolve(a));
+  return out;
+}
+const CLI = process.argv.slice(1);
+const MODE = CLI.indexOf("--uninstall") >= 0 ? "uninstall"
+  : CLI.indexOf("--install") >= 0 ? "install" : "app";
+let pendingFiles = MODE === "app" ? extractFiles(process.argv) : [];
+
+function deliverFiles(files) {
+  if (!files || !files.length) return;
+  if (win && win.webContents) {
+    if (winReady) win.webContents.send("tt-open-files", files);
+    else pendingFiles = pendingFiles.concat(files);
+  } else {
+    pendingFiles = pendingFiles.concat(files);
+  }
+}
+
+let winReady = false;
+function focus(w) { if (!w) return; if (w.isMinimized()) w.restore(); w.focus(); }
 
 function createWindow() {
   win = new BrowserWindow({
@@ -26,22 +60,78 @@ function createWindow() {
   });
   win.setMenuBarVisibility(false);
   win.loadFile(path.join(__dirname, "../index.html"));
+  win.webContents.once("did-finish-load", () => {
+    winReady = true;
+    if (pendingFiles.length) { win.webContents.send("tt-open-files", pendingFiles); pendingFiles = []; }
+  });
   win.once("ready-to-show", () => win.show());
-  win.on("closed", () => { win = null; });
+  win.on("closed", () => { win = null; winReady = false; });
+}
+
+function createInstallerWindow(mode) {
+  instWin = new BrowserWindow({
+    width: 620, height: mode === "uninstall" ? 420 : 620,
+    minWidth: 560, minHeight: 400,
+    resizable: false, backgroundColor: "#1c1d28", frame: false, show: false,
+    title: mode === "uninstall" ? "卸载 天天音乐" : "安装 天天音乐",
+    icon: path.join(__dirname, "../assets/icon.png"),
+    webPreferences: {
+      preload: path.join(__dirname, "preload.js"),
+      contextIsolation: true, nodeIntegration: false,
+      webSecurity: false,
+    },
+  });
+  instWin.setMenuBarVisibility(false);
+  instWin.loadFile(path.join(__dirname, "../installer.html"));
+  instWin.webContents.once("did-finish-load", () => {
+    instWin.webContents.send("tt-installer-init", { mode });
+  });
+  instWin.once("ready-to-show", () => instWin.show());
+  instWin.on("closed", () => { instWin = null; });
+}
+
+/* 单实例：再次双击文件时复用已有窗口 */
+const gotLock = app.requestSingleInstanceLock();
+if (!gotLock) {
+  app.quit();
+} else {
+  app.on("second-instance", (event, argv) => {
+    const files = extractFiles(argv);
+    const isInst = argv.slice(1).indexOf("--install") >= 0;
+    const isUnin = argv.slice(1).indexOf("--uninstall") >= 0;
+    if (instWin) { focus(instWin); return; }
+    if (isInst || isUnin) {
+      if (win) focus(win);
+      else if (!instWin) createInstallerWindow(isUnin ? "uninstall" : "install");
+      return;
+    }
+    if (win) { focus(win); deliverFiles(files); }
+    else { pendingFiles = pendingFiles.concat(files); createWindow(); }
+  });
 }
 
 app.whenReady().then(() => {
-  createWindow();
-  app.on("activate", () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
+  if (MODE === "install" || MODE === "uninstall") {
+    createInstallerWindow(MODE);
+  } else {
+    createWindow();
+  }
+  app.on("activate", () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      if (MODE === "install" || MODE === "uninstall") createInstallerWindow(MODE);
+      else createWindow();
+    }
+  });
 });
 app.on("window-all-closed", () => { if (process.platform !== "darwin") app.quit(); });
 
 /* ---------------- 窗口控制 ---------------- */
 ipcMain.on("tt-win", (e, action) => {
-  if (!win) return;
-  if (action === "min") win.minimize();
-  else if (action === "max") win.isMaximized() ? win.unmaximize() : win.maximize();
-  else if (action === "close") win.close();
+  const w = BrowserWindow.fromWebContents(e.sender) || win;
+  if (!w) return;
+  if (action === "min") w.minimize();
+  else if (action === "max") w.isMaximized() ? w.unmaximize() : w.maximize();
+  else if (action === "close") w.close();
 });
 
 /* ---------------- 目录 ---------------- */
@@ -125,6 +215,34 @@ ipcMain.handle("tt-transcode", async (e, file) => {
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
   }
+});
+
+/* ---------------- 安装 / 卸载 / 设为默认播放器 ---------------- */
+ipcMain.handle("tt-installer-defaults", () => {
+  try { return { ok: true, info: IN.defaults() }; }
+  catch (e) { return { ok: false, error: String(e && e.message || e) }; }
+});
+ipcMain.handle("tt-installer-run", async (e, opts) => {
+  const send = (p) => {
+    if (instWin && instWin.webContents) instWin.webContents.send("tt-install-progress", p);
+    if (win && win.webContents) win.webContents.send("tt-install-progress", p);
+  };
+  try { return IN.install(opts || {}, send); }
+  catch (err) { return { ok: false, error: String(err && err.message || err) }; }
+});
+ipcMain.handle("tt-installer-uninstall", async () => {
+  try { return IN.uninstall(); }
+  catch (err) { return { ok: false, error: String(err && err.message || err) }; }
+});
+ipcMain.on("tt-open-default-apps", () => { IN.openDefaultApps(); });
+ipcMain.on("tt-open-file-assoc-tip", () => {
+  shell.openExternal("ms-settings:defaultapps").catch ? shell.openExternal("ms-settings:defaultapps").catch(() => {}) : null;
+});
+ipcMain.on("tt-quit", () => { app.quit(); });
+ipcMain.handle("tt-take-pending", () => { const f = pendingFiles; pendingFiles = []; return f; });
+ipcMain.on("tt-open-installer", () => {
+  if (instWin) { focus(instWin); return; }
+  createInstallerWindow("install");
 });
 
 /* ---------------- 下载（带进度） ---------------- */
