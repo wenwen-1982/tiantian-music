@@ -573,30 +573,117 @@
 
   /* ---------------- 视频导入 ---------------- */
   const VIDEO_RE = /\.(mp4|webm|mkv|mov|m4v|avi|flv|f4v|wmv|mpg|mpeg|mpe|vob|asf|rm|rmvb|ts|mts|m2ts|3gp|3g2|ogv)$/i;
-  // Chromium 解不了的格式：播放前用 ffmpeg 转成 mp4
+  // Chromium 解不了的老容器：播放前必须用 ffmpeg 换容器 / 转码
   const TC_RE = /\.(avi|wmv|flv|f4v|swf|rm|rmvb|mpg|mpeg|mpe|m1v|m2v|vob|asf|3gp|3g2|mts|m2ts|dat|ogv)$/i;
+  // 容器能被 Chromium 识别、但里面的编码未必支持（典型：mp4 里装 HEVC / H.265）
+  const CONTAINER_OK_RE = /\.(mp4|m4v|mov|mkv|webm|ogv)$/i;
+  function videoPathOf(t) {
+    if (!t) return "";
+    if (t.path) return t.path;
+    return /^file:/i.test(t.url || "") ? t.url : "";
+  }
   function needsTranscode(t) {
     if (!t || t._tcUrl) return false;
     return TC_RE.test(String(t.path || t.fileName || t.url || "").split("?")[0]);
   }
-  async function prepareVideo(track) {
-    if (!needsTranscode(track)) return track;
-    if (!API.hasDesktop || !window.ttDesktop.transcode) {
-      toast("浏览器预览无法转换格式，请用桌面版播放该文件");
+  function containerOk(t) {
+    return CONTAINER_OK_RE.test(String(t.path || t.fileName || t.url || "").split("?")[0]);
+  }
+  function canProbe(t) {
+    return !!(videoPathOf(t) && API.hasDesktop && window.ttDesktop && window.ttDesktop.probeCodec);
+  }
+  // 探测视频 / 音频编码（结果挂在 track 上，同一文件只探一次）
+  async function codecProbe(track) {
+    if (track._codecInfo) return track._codecInfo;
+    if (track._codecProbed || !canProbe(track)) return null;
+    track._codecProbed = true;
+    try {
+      const info = await window.ttDesktop.probeCodec(videoPathOf(track));
+      if (info && info.ok) {
+        track._codecInfo = info;
+        if (!track.duration && info.duration) track.duration = info.duration;
+        return info;
+      }
+    } catch (e) {}
+    return null;
+  }
+  // 浏览器能否直接解码该文件；探测不到时按「可以」处理（仍保留下面的兜底）
+  async function codecOk(track) {
+    if (track._codecOk !== undefined) return track._codecOk;
+    if (!containerOk(track)) { track._codecOk = true; return true; }   // 老容器交给 needsTranscode 处理
+    const info = await codecProbe(track);
+    track._codecOk = info ? !info.needsTranscode : true;
+    return track._codecOk;
+  }
+  /**
+   * 播放前准备：必要时转成 MP4
+   * @param opts { force: 强制转码; forceEncode: 跳过 -c copy 直接重编码 }
+   */
+  async function prepareVideo(track, opts) {
+    opts = opts || {};
+    if (!track || track._tcUrl) return track;
+    const desktop = API.hasDesktop && window.ttDesktop && window.ttDesktop.transcode;
+    if (!desktop) {
+      if (needsTranscode(track)) toast("浏览器预览无法转换格式，请用桌面版播放该文件");
       return track;
     }
+    let need = !!opts.force || needsTranscode(track);
+    if (!need) need = !(await codecOk(track));
+    if (!need) return track;
+
     setNet("转换格式中…");
     try {
-      const r = await window.ttDesktop.transcode(track.path || track.url);
+      const r = await window.ttDesktop.transcode(videoPathOf(track) || track.url,
+        track._codecInfo || null, { forceEncode: !!opts.forceEncode });
       if (!r || !r.ok) {
         toast("格式转换失败：" + ((r && r.error) || "未知错误"));
         return track;
       }
       track._tcUrl = r.url;
       track._tcMode = r.mode || "";
-      if (!r.cached) toast(r.mode === "copy" ? "已转换容器（无损）" : "已转码为 MP4，下次播放直接用缓存");
+      if (!r.cached && r.mode !== "cache") {
+        toast(r.mode === "copy" ? "已转换容器（无损）" : "该视频编码浏览器不支持，已转为 MP4（下次播放用缓存）");
+      }
       return Object.assign({}, track, { url: r.url });
     } finally {
+      setNet("视频播放");
+    }
+  }
+
+  /* 兜底：mp4 里装 HEVC 这类情况，浏览器会静默忽略视频轨 ——
+   * 有声音、没画面、也不报 error。只能靠「有元数据但画面尺寸恒为 0」来判定。 */
+  let picGuardTimer = null;
+  let picGuardTries = 0;
+  function armPictureGuard(delay) {
+    clearTimeout(picGuardTimer);
+    picGuardTimer = setTimeout(checkVideoPicture, delay || 2200);
+  }
+  async function checkVideoPicture() {
+    if (!videoMode) return;
+    const v = document.getElementById("videoEl");
+    const t = TV.getTrack();
+    if (!v || !t || t._tcUrl || t._picChecked) return;
+    if (t._codecInfo && !t._codecInfo.video) return;      // 本来就没有视频轨，不折腾
+    if (v.currentTime < 0.3 || v.readyState < 2) {        // 还没真正播起来，稍后再看
+      picGuardTries += 1;
+      if (picGuardTries < 8) armPictureGuard(1500);
+      return;
+    }
+    if (v.videoWidth > 0 || v.videoHeight > 0) return;    // 画面正常
+    t._picChecked = true;
+    const at = v.currentTime;
+    setNet("画面无法解码，正在转换…");
+    const t2 = await prepareVideo(t, { force: true, forceEncode: true });
+    if (t2 && t2._tcUrl && t2.url) {
+      TV.load(t2, { autoplay: true });
+      let tries = 0;
+      (function restore() {                                // 转完回到原来的进度
+        tries += 1;
+        if (TV.duration() > 0) { TV.seek(at); return; }
+        if (tries < 15) setTimeout(restore, 300);
+      })();
+      toast("该视频用了浏览器不支持的编码，已自动转为 MP4 播放");
+    } else {
       setNet("视频播放");
     }
   }
@@ -683,6 +770,11 @@
         try {
           const d = await probeDuration(t);
           if (d) { t.duration = d; }
+          else {
+            // 浏览器解不了的编码（如 HEVC）读不到时长，交给 ffmpeg 探测（顺带缓存编码信息）
+            const info = await codecProbe(t);
+            if (info && info.duration) t.duration = info.duration;
+          }
         } catch (e) {}
       }
       persist();
@@ -991,7 +1083,7 @@
     $("#volRange").addEventListener("input", (e) => setVolume(e.target.value / 100));
     $("#swAutoLrc").addEventListener("click", () => { state.autoLrc = !state.autoLrc; $("#swAutoLrc").classList.toggle("on", state.autoLrc); persist(); });
     $("#swAutoPlay").addEventListener("click", () => toast("该功能仅桌面版可用"));
-    $("#btnAbout").addEventListener("click", () => toast("天天音乐 1.3.0 · 本地播放 + 视频播放 + 开放版权曲库 + 歌词同步", 3200));
+    $("#btnAbout").addEventListener("click", () => toast("天天音乐 1.4.0 · 本地播放 + 视频播放 + 开放版权曲库 + 歌词同步", 3200));
 
     // 快捷键
     window.addEventListener("keydown", (e) => {
@@ -1098,6 +1190,8 @@
       P.on("loaded", (d) => { if (d.duration) $("#tDur").textContent = L.fmtTime(d.duration); });
     });
     E.on("error", (err) => toast((err && err.message) || "播放出错"));
+    // 视频开始播放后检查画面是否真的出来了（静默黑屏兜底）
+    TV.on("play", () => { if (videoMode) { picGuardTries = 0; armPictureGuard(); } });
     // 视频解码失败时（mkv / mov 里装了老编码等情况）自动转码后重试一次
     TV.on("error", async (err) => {
       const t = TV.getTrack();

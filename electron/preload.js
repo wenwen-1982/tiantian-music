@@ -13,7 +13,8 @@ contextBridge.exposeInMainWorld("ttDesktop", {
   scanVideoDir: () => ipcRenderer.invoke("tt-scan-video-dir"),
   openPath: (p) => ipcRenderer.send("tt-open-path", p),
   hasFfmpeg: () => ipcRenderer.invoke("tt-has-ffmpeg"),
-  transcode: (file) => ipcRenderer.invoke("tt-transcode", file),
+  probeCodec: (file) => ipcRenderer.invoke("tt-probe-codec", file),
+  transcode: (file, info, opts) => ipcRenderer.invoke("tt-transcode", file, info || null, opts || null),
   onTranscode: (cb) => ipcRenderer.on("tt-transcode-progress", (e, p) => cb(p)),
 
   // 双击关联文件 / 从资源管理器打开

@@ -206,11 +206,15 @@ ipcMain.handle("tt-scan-video-dir", async () => {
 
 /* ---------------- 老格式视频转码 ---------------- */
 ipcMain.handle("tt-has-ffmpeg", () => TT.hasFfmpeg());
-ipcMain.handle("tt-transcode", async (e, file) => {
+ipcMain.handle("tt-probe-codec", async (e, file) => {
+  try { return await TT.probe(file); }
+  catch (err) { return { ok: false, error: String((err && err.message) || err) }; }
+});
+ipcMain.handle("tt-transcode", async (e, file, info, opts) => {
   try {
     const r = await TT.transcode(file, (p) => {
       if (win) win.webContents.send("tt-transcode-progress", p);
-    });
+    }, Object.assign({}, opts || {}, { info: info || null }));
     return r;
   } catch (err) {
     return { ok: false, error: String((err && err.message) || err) };
