@@ -9,7 +9,10 @@
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { app, shell, spawn } = (() => { try { return require("electron"); } catch (e) { return {}; } })();
+const EL = (() => { try { return require("electron"); } catch (e) { return {}; } })();
+const { app, shell } = EL;
+// require("electron") 不导出 spawn，必须回退到 child_process（否则卸载时的延迟删除脚本起不来）
+const spawn = (EL && typeof EL.spawn === "function") ? EL.spawn : require("child_process").spawn;
 const A = require("./assoc");
 
 const APP_ID = "TianTianMusic";

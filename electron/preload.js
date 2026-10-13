@@ -30,4 +30,12 @@ contextBridge.exposeInMainWorld("ttDesktop", {
   openDefaultApps: () => ipcRenderer.send("tt-open-default-apps"),
   openInstaller: () => ipcRenderer.send("tt-open-installer"),
   quitApp: () => ipcRenderer.send("tt-quit"),
+
+  // 在线升级
+  appInfo: () => ipcRenderer.invoke("tt-app-info"),
+  updateCheck: () => ipcRenderer.invoke("tt-update-check"),
+  updateApply: (asset, version) => ipcRenderer.invoke("tt-update-apply", { asset: asset || null, version: version || "" }),
+  onUpdateProgress: (cb) => ipcRenderer.on("tt-update-progress", (e, p) => cb(p)),
+  updateResult: () => ipcRenderer.invoke("tt-update-result"),
+  openReleases: () => ipcRenderer.invoke("tt-update-open-page"),
 });

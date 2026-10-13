@@ -64,10 +64,10 @@
       <div class="nav-group-title">其他</div>
       <div class="nav-item" data-view="setting">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 8a4 4 0 100 8 4 4 0 000-8zm8.9 4c0 .5 0 1-.1 1.4l2 1.5-2 3.4-2.4-1a7.6 7.6 0 01-2.4 1.4l-.4 2.6h-4l-.4-2.6a7.6 7.6 0 01-2.4-1.4l-2.4 1-2-3.4 2-1.5a8.7 8.7 0 010-2.8l-2-1.5 2-3.4 2.4 1A7.6 7.6 0 019 4.3L9.4 1.7h4l.4 2.6c.9.3 1.7.8 2.4 1.4l2.4-1 2 3.4-2 1.5c.1.5.1 1 .1 1.4z"/></svg>
-        设置
+        设置 <span class="badge new" id="badgeUpdate" style="display:none">新版本</span>
       </div>
       <div style="flex:1"></div>
-      <div style="color:var(--text-3);font-size:11.5px;padding:8px 12px 0">版本 1.4.0 · 桌面版</div>
+      <div id="sbVersion" style="color:var(--text-3);font-size:11.5px;padding:8px 12px 0">版本 1.5.0 · 桌面版</div>
     </aside>
 
     <!-- 主区 -->
@@ -241,7 +241,41 @@
             </div>
           </div>
           <div class="setting-row">
-            <div class="lbl">关于天天音乐<small>版本 1.4.0 · 一款开源的桌面音乐播放器：本地音乐 + 视频 + 开放版权曲库 + 歌词</small></div>
+            <div class="lbl">软件更新<small id="updateState">当前版本 1.5.0 · 从 GitHub 检查最新版本</small></div>
+            <div style="display:flex;gap:8px">
+              <button class="btn" id="btnReleases">手动下载</button>
+              <button class="btn primary" id="btnCheckUpdate">检查更新</button>
+            </div>
+          </div>
+          <div class="setting-row">
+            <div class="lbl">启动时自动检查更新<small>发现新版本时在左侧「设置」上显示提示</small></div>
+            <div class="switch" id="swAutoUpdate"></div>
+          </div>
+
+          <!-- 发现新版本后展开 -->
+          <div class="update-card" id="updateCard" style="display:none">
+            <div class="uc-head">
+              <span class="uc-dot"></span>
+              <b id="ucTitle">发现新版本</b>
+              <span class="uc-cur" id="ucCur"></span>
+              <span class="uc-spacer"></span>
+              <span class="uc-size" id="ucSize"></span>
+            </div>
+            <div class="uc-sub" id="ucDate"></div>
+            <div class="uc-notes" id="ucNotes"></div>
+            <div class="uc-prog" id="ucProg" style="display:none">
+              <div class="uc-bar"><div class="uc-bar-fill" id="ucBarFill"></div></div>
+              <div class="uc-pct" id="ucPct">0%</div>
+            </div>
+            <div class="uc-err" id="ucErr" style="display:none"></div>
+            <div class="uc-actions">
+              <button class="btn" id="btnSkipUpdate">跳过此版本</button>
+              <button class="btn primary" id="btnDoUpdate">立即升级</button>
+            </div>
+          </div>
+
+          <div class="setting-row">
+            <div class="lbl">关于天天音乐<small id="aboutVersion">版本 1.5.0 · 一款开源的桌面音乐播放器：本地音乐 + 视频 + 开放版权曲库 + 歌词</small></div>
             <div><button class="btn" id="btnAbout">查看说明</button></div>
           </div>
         </section>

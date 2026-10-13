@@ -42,6 +42,10 @@
   let videoMode = false;        // 当前播放的是视频
   let lastVolume = 0.7;         // 静音前的音量
 
+  // 软件更新（下方「软件更新」模块里初始化；用 var 声明以便 renderSetting 提前安全引用）
+  var APP_VER = "1.5.0";
+  var UPD_SW = null;
+
   const ACCENTS = ["#5b67e0", "#7c5cf8", "#e0567b", "#e08a3c", "#3fae72", "#3a9bd6"];
   const CLOUD_BADGE = "☁";
 
@@ -298,6 +302,7 @@
     setVolume(state.volume, { persist: false });
     $("#swAutoLrc").classList.toggle("on", state.autoLrc);
     $("#swAutoPlay").classList.toggle("on", false);
+    if (UPD_SW) UPD_SW.classList.toggle("on", localStorage.getItem("ttAutoUpdate") !== "0");
     renderSwatches();
   }
   function renderSearchResult() {
@@ -1083,7 +1088,7 @@
     $("#volRange").addEventListener("input", (e) => setVolume(e.target.value / 100));
     $("#swAutoLrc").addEventListener("click", () => { state.autoLrc = !state.autoLrc; $("#swAutoLrc").classList.toggle("on", state.autoLrc); persist(); });
     $("#swAutoPlay").addEventListener("click", () => toast("该功能仅桌面版可用"));
-    $("#btnAbout").addEventListener("click", () => toast("天天音乐 1.4.0 · 本地播放 + 视频播放 + 开放版权曲库 + 歌词同步", 3200));
+    $("#btnAbout").addEventListener("click", () => toast("天天音乐 " + APP_VER + " · 本地播放 + 视频播放 + 开放版权曲库 + 歌词同步 + 在线升级", 3400));
 
     // 快捷键
     window.addEventListener("keydown", (e) => {
@@ -1146,6 +1151,216 @@
         $("#installState").textContent = "仅在桌面版（exe）中可用";
       }
     }
+
+    /* ---------------- 软件更新 ---------------- */
+    const KEY_AUTO = "ttAutoUpdate";
+    const KEY_SKIP = "ttSkipVersion";
+    const UPD = { info: null, checked: false, busy: false, armed: false };
+    const UE = {
+      state: $("#updateState"), check: $("#btnCheckUpdate"), releases: $("#btnReleases"),
+      card: $("#updateCard"), title: $("#ucTitle"), cur: $("#ucCur"), date: $("#ucDate"),
+      notes: $("#ucNotes"), size: $("#ucSize"), prog: $("#ucProg"), fill: $("#ucBarFill"),
+      pct: $("#ucPct"), err: $("#ucErr"), skip: $("#btnSkipUpdate"), go: $("#btnDoUpdate"),
+      badge: $("#badgeUpdate"),
+    };
+    UPD_SW = UE.prog ? $("#swAutoUpdate") : null;
+
+    function fmtBytes(n) {
+      if (!n) return "";
+      if (n >= 1073741824) return (n / 1073741824).toFixed(2) + " GB";
+      if (n >= 1048576) return (n / 1048576).toFixed(1) + " MB";
+      return Math.max(1, Math.round(n / 1024)) + " KB";
+    }
+    function fmtDate(s) {
+      if (!s) return "";
+      const d = new Date(s);
+      if (isNaN(d.getTime())) return "";
+      return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+    }
+    function autoUpdateOn() { return localStorage.getItem(KEY_AUTO) !== "0"; }
+    function setBadge(on) { if (UE.badge) UE.badge.style.display = on ? "" : "none"; }
+    function updateBusy(on) {
+      [UE.check, UE.go, UE.skip].forEach((b) => { if (b) b.disabled = !!on; });
+    }
+
+    function showCard(info) {
+      if (!UE.card) return;
+      UE.card.style.display = "";
+      UE.title.textContent = "新版本 " + (info.tag || ("v" + info.latest));
+      UE.cur.textContent = "当前 v" + info.current;
+      UE.size.textContent = info.asset ? fmtBytes(info.asset.size) : "";
+      const d = fmtDate(info.publishedAt);
+      UE.date.textContent = "发布于 " + (d || "—") + (info.asset ? " · " + info.asset.name : "");
+      UE.notes.textContent = (info.notes || "（该版本未填写更新说明）").slice(0, 4000);
+      UE.err.style.display = "none";
+      UE.prog.style.display = "none";
+      UE.fill.style.width = "0%";
+      UE.pct.textContent = "0%";
+      UPD.armed = false;
+      updateBusy(false);
+      UE.go.textContent = info.asset ? "立即升级" : "无可下载的安装包";
+      UE.go.disabled = !info.asset;
+    }
+    function hideCard() { if (UE.card) UE.card.style.display = "none"; }
+
+    async function runCheck(silent) {
+      if (!API.hasDesktop || !window.ttDesktop.updateCheck) {
+        if (UE.state) UE.state.textContent = "仅在桌面版（exe）中可用";
+        updateBusy(true);
+        if (UPD_SW) UPD_SW.style.display = "none";
+        return;
+      }
+      if (UPD.busy) return;
+      UPD.busy = true;
+      if (UE.check) { UE.check.disabled = true; UE.check.textContent = "检查中…"; }
+      if (UE.state) UE.state.textContent = "正在从 GitHub 检查最新版本…";
+      let r = null;
+      try { r = await window.ttDesktop.updateCheck(); } catch (e) { r = { ok: false, error: String((e && e.message) || e) }; }
+      UPD.busy = false;
+      UPD.checked = true;
+      if (UE.check) { UE.check.disabled = false; UE.check.textContent = "检查更新"; }
+
+      if (!r || !r.ok) {
+        const msg = (r && r.error) || "网络不可用";
+        if (UE.state) UE.state.textContent = "检查失败：" + msg + "（可点「手动下载」）";
+        if (!silent) toast("检查更新失败：" + msg, 3800);
+        return;
+      }
+      UPD.info = r;
+      if (r.hasUpdate) {
+        const skip = localStorage.getItem(KEY_SKIP) || "";
+        if (UE.state) UE.state.textContent = "发现新版本 v" + r.latest + "（当前 v" + r.current + "）";
+        if (!silent) { setBadge(true); showCard(r); toast("发现新版本 v" + r.latest, 3400); return; }
+        if (skip === r.latest) { setBadge(false); hideCard(); }
+        else { setBadge(true); showCard(r); }
+      } else {
+        setBadge(false); hideCard();
+        UPD.info = r;
+        if (UE.state) UE.state.textContent = "已是最新版本（v" + r.current + "）";
+        if (!silent) toast("已是最新版本 v" + r.current, 2600);
+      }
+    }
+
+    async function doUpdate() {
+      const info = UPD.info;
+      if (!info || !info.asset) return;
+      // 第一次点击只是提醒（升级会关掉应用），再点一次才真正执行
+      if (!UPD.armed) {
+        UPD.armed = true;
+        UE.go.textContent = "确认升级并重启";
+        UE.err.style.display = "";
+        UE.err.textContent = "升级需要下载 " + fmtBytes(info.asset.size) + "，随后应用会自动关闭、替换文件并重新启动。" +
+          "正在播放的内容会中断，请先保存其它窗口里的操作。再点一次按钮开始。";
+        clearTimeout(UPD._arm);
+        UPD._arm = setTimeout(() => {
+          if (UPD.armed) { UPD.armed = false; UE.go.textContent = "立即升级"; UE.err.style.display = "none"; }
+        }, 15000);
+        return;
+      }
+      UPD.armed = false;
+      clearTimeout(UPD._arm);
+      updateBusy(true);
+      UE.go.textContent = "正在升级…";
+      UE.err.style.display = "none";
+      UE.prog.style.display = "flex";
+      UE.fill.style.width = "0%";
+      UE.pct.textContent = "0%";
+      toast("正在下载新版本，请勿关闭应用", 4200);
+
+      let r = null;
+      try { r = await window.ttDesktop.updateApply(info.asset, info.latest); }
+      catch (e) { r = { ok: false, error: String((e && e.message) || e) }; }
+
+      if (!r || !r.ok) {
+        updateBusy(false);
+        UE.go.textContent = "重试升级";
+        UE.err.style.display = "";
+        UE.err.textContent = "升级失败：" + ((r && r.error) || "未知错误") + "。可点右上「手动下载」自行覆盖安装。";
+        toast("升级失败：" + ((r && r.error) || "未知错误"), 4200);
+        return;
+      }
+      UE.fill.style.width = "100%";
+      UE.pct.textContent = "100%";
+      UE.go.textContent = "正在重启…";
+      UE.err.style.display = "";
+      UE.err.textContent = "升级包已就绪，应用即将自动重启完成升级…";
+    }
+
+    if (API.hasDesktop && window.ttDesktop.onUpdateProgress) {
+      window.ttDesktop.onUpdateProgress((p) => {
+        if (!p || !UE.prog) return;
+        UE.prog.style.display = "flex";
+        if (p.phase === "download") {
+          if (p.total) {
+            const pct = p.percent || 0;
+            UE.fill.style.width = pct + "%";
+            UE.pct.textContent = pct + "%";
+            UE.go.textContent = "下载中 " + pct + "%";
+          } else {
+            UE.fill.style.width = "35%";
+            UE.pct.textContent = fmtBytes(p.received);
+            UE.go.textContent = "下载中 " + fmtBytes(p.received);
+          }
+          UE.err.style.display = "none";
+        } else {
+          UE.fill.style.width = "100%";
+          UE.pct.textContent = "100%";
+          UE.go.textContent = "处理中…";
+          UE.err.style.display = "";
+          UE.err.textContent = p.text || "正在处理升级包…";
+        }
+      });
+    }
+
+    if (UE.check) {
+      UE.check.addEventListener("click", () => runCheck(false));
+      UE.releases.addEventListener("click", () => {
+        if (API.hasDesktop && window.ttDesktop.openReleases) window.ttDesktop.openReleases();
+        else toast("打开 https://github.com/wenwen-1982/tiantian-music/releases", 4000);
+      });
+      UE.skip.addEventListener("click", () => {
+        const v = UPD.info && UPD.info.latest;
+        if (!v) return;
+        localStorage.setItem(KEY_SKIP, v);
+        setBadge(false);
+        hideCard();
+        if (UE.state) UE.state.textContent = "已跳过 v" + v + " · 下次可点「检查更新」恢复提示";
+        toast("已跳过 v" + v + "，有新版本时会再提醒你", 3200);
+      });
+      UE.go.addEventListener("click", doUpdate);
+    }
+    if (UPD_SW) {
+      UPD_SW.classList.toggle("on", autoUpdateOn());
+      UPD_SW.addEventListener("click", () => {
+        const on = !autoUpdateOn();
+        localStorage.setItem(KEY_AUTO, on ? "1" : "0");
+        UPD_SW.classList.toggle("on", on);
+        toast(on ? "已开启：启动时自动检查更新" : "已关闭启动时自动检查更新", 2400);
+      });
+    }
+
+    (async function initUpdate() {
+      if (API.hasDesktop && window.ttDesktop.appInfo) {
+        let info = null;
+        try { info = await window.ttDesktop.appInfo(); } catch (e) {}
+        if (info && info.version) {
+          APP_VER = info.version;
+          if ($("#sbVersion")) $("#sbVersion").textContent = "版本 v" + APP_VER + " · 桌面版";
+          if ($("#aboutVersion")) $("#aboutVersion").textContent = "版本 v" + APP_VER + " · 一款开源的桌面音乐播放器：本地音乐 + 视频 + 开放版权曲库 + 歌词";
+          if (UE.state) UE.state.textContent = "当前版本 v" + APP_VER + " · 从 GitHub 检查最新版本";
+        }
+        // 上次升级的结果回执（升级器写在新版启动前）
+        if (window.ttDesktop.updateResult) {
+          try {
+            const res = await window.ttDesktop.updateResult();
+            if (res) { try { localStorage.setItem("ttLastUpdate", JSON.stringify(res)); } catch (e) {} }
+            if (res && res.ok) setTimeout(() => toast("升级完成，已更新到 v" + (res.version || APP_VER), 4600), 1500);
+            else if (res && res.ok === false) setTimeout(() => toast("上次升级未完成：" + ((res.errors && res.errors[0]) || "文件被占用") + "，可再试一次", 5200), 1500);
+          } catch (e) {}
+        }
+      }
+      if (autoUpdateOn()) setTimeout(() => runCheck(true), 3500);
+    })();
 
     // 引擎事件（音频 + 视频统一处理）
     const PLAY_PATH = "M8 5l12 7-12 7V5z";

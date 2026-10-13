@@ -6,6 +6,7 @@ const http = require("http");
 const { URL } = require("url");
 const TT = require("./transcode");
 const IN = require("./installer");
+const UP = require("./updater");
 
 // 部分显卡/虚拟机环境下 GPU 进程不可用，禁用硬件加速以保证可启动
 app.disableHardwareAcceleration();
@@ -111,6 +112,7 @@ if (!gotLock) {
 }
 
 app.whenReady().then(() => {
+  try { UP.cleanOldStages(); } catch (e) {}
   if (MODE === "install" || MODE === "uninstall") {
     createInstallerWindow(MODE);
   } else {
@@ -247,6 +249,61 @@ ipcMain.handle("tt-take-pending", () => { const f = pendingFiles; pendingFiles =
 ipcMain.on("tt-open-installer", () => {
   if (instWin) { focus(instWin); return; }
   createInstallerWindow("install");
+});
+
+/* ---------------- 在线升级 ---------------- */
+function broadcast(channel, payload) {
+  for (const w of BrowserWindow.getAllWindows()) {
+    try { w.webContents.send(channel, payload); } catch (e) {}
+  }
+}
+
+ipcMain.handle("tt-app-info", () => {
+  let exe = "";
+  try { exe = path.basename(UP.exePath()); } catch (e) {}
+  return {
+    version: UP.currentVersion(),
+    pid: process.pid,
+    repo: UP.REPO,
+    pageUrl: UP.PAGE_URL,
+    dir: UP.sourceDir(),
+    exe: exe,
+    hasUpdater: true,
+    updatedTo: process.env.TT_UPDATED_TO || "",   // 由升级器写入，重启后用于提示
+  };
+});
+
+ipcMain.handle("tt-update-check", async () => {
+  try { return await UP.check({ current: UP.currentVersion() }); }
+  catch (err) { return { ok: false, error: String((err && err.message) || err), pageUrl: UP.PAGE_URL }; }
+});
+
+// 下载 + 解压 + 拉起升级器；成功后应用会自动退出并由升级器重启
+ipcMain.handle("tt-update-apply", async (e, payload) => {
+  try {
+    const job = payload || {};
+    const dl = await UP.download(job.asset, (p) => {
+      broadcast("tt-update-progress", {
+        phase: "download", received: p.received, total: p.total,
+        percent: p.total ? Math.min(100, Math.round((p.received / p.total) * 100)) : 0,
+        text: "正在下载 " + (job.asset && job.asset.name ? job.asset.name : "升级包") + "…",
+      });
+    });
+    const r = UP.apply({
+      zipPath: dl.path, version: job.version,
+      onProgress: (p) => broadcast("tt-update-progress", p),
+    });
+    setTimeout(() => { try { app.quit(); } catch (err) {} }, 1200);
+    return Object.assign({ ok: true, size: dl.size }, r);
+  } catch (err) {
+    return { ok: false, error: String((err && err.message) || err) };
+  }
+});
+
+ipcMain.handle("tt-update-result", () => UP.takeResult());
+ipcMain.handle("tt-update-open-page", () => {
+  shell.openExternal(UP.PAGE_URL).catch(() => {});
+  return true;
 });
 
 /* ---------------- 下载（带进度） ---------------- */

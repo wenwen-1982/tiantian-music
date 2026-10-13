@@ -8,8 +8,9 @@
 
 | 版本 | 文件 | 说明 |
 |---|---|---|
-| **v1.4.0** | [TianTianMusic-v1.4.0-win64.zip](https://github.com/wenwen-1982/tiantian-music/releases/download/v1.4.0/TianTianMusic-v1.4.0-win64.zip) | Windows 10/11 64 位，126.9 MB。**推荐**：修复 H.265(HEVC) 视频有声音没画面。解压后双击 `天天音乐.exe` 即可运行；再到「设置 → 安装到本机」即可关联文件类型 |
-| v1.3.0 | [TianTianMusic-v1.3.0-win64.zip](https://github.com/wenwen-1982/tiantian-music/releases/download/v1.3.0/TianTianMusic-v1.3.0-win64.zip) | Windows 10/11 64 位，126.8 MB。解压后双击 `天天音乐.exe` 即可运行；再到「设置 → 安装到本机」即可关联文件类型 |
+| **v1.5.0** | [TianTianMusic-v1.5.0-win64.zip](https://github.com/wenwen-1982/tiantian-music/releases/download/v1.5.0/TianTianMusic-v1.5.0-win64.zip) | Windows 10/11 64 位，126.9 MB。**推荐**：新增「在线升级」，装完这一个版本以后就能在应用内一键升级。解压后双击 `天天音乐.exe` 即可运行；再到「设置 → 安装到本机」即可关联文件类型 |
+| v1.4.0 | [TianTianMusic-v1.4.0-win64.zip](https://github.com/wenwen-1982/tiantian-music/releases/download/v1.4.0/TianTianMusic-v1.4.0-win64.zip) | Windows 10/11 64 位，126.9 MB。修复 H.265(HEVC) 视频有声音没画面 |
+| v1.3.0 | [TianTianMusic-v1.3.0-win64.zip](https://github.com/wenwen-1982/tiantian-music/releases/download/v1.3.0/TianTianMusic-v1.3.0-win64.zip) | Windows 10/11 64 位，126.8 MB。内置安装器 + 文件关联，双击音乐 / 视频文件直接播放 |
 | v1.0.0 | [TianTianMusic-v1.0.0-win64.zip](https://github.com/wenwen-1982/tiantian-music/releases/download/v1.0.0/TianTianMusic-v1.0.0-win64.zip) | Windows 10/11 64 位绿色版，105.6 MB，解压后双击 `天天音乐.exe` 即可运行，无需安装 |
 
 全部版本见 [Releases](https://github.com/wenwen-1982/tiantian-music/releases)。
@@ -29,6 +30,26 @@
 > 「打开方式」和系统「默认应用」列表；尚未指定默认程序的格式（如 flac、mkv、flv 等）
 > 安装后即可直接双击打开，已被其它程序占用的格式需要在系统设置里切换一次。
 
+## 在线升级
+
+左侧「设置 → 软件更新」→ **检查更新**，剩下的交给它：
+
+1. 从 GitHub Releases 读取最新版本号与更新说明，与当前版本比对（1.10.0 > 1.9.0 这类比较是正确的）；
+2. 有新版本时点 **立即升级**（两步确认，防止误触）：自动下载 → 校验文件体积与官方 sha256 摘要 → 解压 → 关闭应用 → 覆盖程序文件 → 自动重启；
+3. 升级完成后重新打开会提示「升级完成，已更新到 vX.Y.Z」。
+
+几个细节：
+
+- **个人数据不受影响**：收藏、歌单、最近播放、主题、音量都存在 `%APPDATA%`，升级只替换程序文件。
+  绿色版就地升级解压目录；安装版升级 `%LOCALAPPDATA%\Programs\天天音乐`。
+- **沿用启动参数**：双击某个音乐 / 视频文件时若正好升级，重启后会重新打开同一个文件。
+- **升级进度可见**：设置页的进度条会实时显示下载百分比、解压与重启阶段。
+- **网络**：默认直连 GitHub；失败会依次尝试 `ghfast.top` / `ghproxy.net` 加速镜像。
+  都不通时点 **手动下载** 直接打开 Releases 页面。
+- **可跳过**：点「跳过此版本」后不再提醒该版本；设置里可关闭「启动时自动检查更新」。
+- **自建更新源**（内网 / 离线分发）：给进程设置环境变量
+  `TT_UPDATE_API=<你的 release JSON 地址>` 即可指向自己的发布服务，只有显式设置时才生效。
+
 ## 功能
 
 | 模块 | 说明 |
@@ -44,6 +65,7 @@
 | 音量 | 底部播放条与设置页实时显示百分比，支持拖动 / 滚轮 / ↑↓ 调节、点击图标静音记忆 |
 | 主题 | 6 种主题色、深色 / 浅色模式，全部设置本地持久化 |
 | 安装与文件关联 | 内置安装器（`--install`）：复制到 `%LOCALAPPDATA%\Programs\天天音乐`、写文件关联 / 卸载项 / 快捷方式；单实例，双击关联文件直接播放，第二次双击复用已有窗口 |
+| 在线升级 | 应用内检查 GitHub Releases 新版本 → 一键下载、校验（体积 + sha256）、解压、退出后覆盖文件并自动重启；支持更新日志展示、跳过版本、启动时自动检查、国内镜像回退，详见 [在线升级](#在线升级) |
 | 快捷键 | 空格播放暂停 · ←/→ 快退快进 5s · Ctrl+←/→ 切歌 · ↑/↓ 音量 · F 视频全屏 · Esc 关闭歌词页 |
 
 | 发现页 | 歌词页 | 视频播放 |
@@ -107,10 +129,13 @@ tiantian-music/
 │       └── app.js        # 界面状态与交互
 ├── installer.html        # 安装 / 卸载界面
 ├── electron/
-│   ├── main.js           # 主进程（窗口 / 下载 / 文件扫描 / 命令行打开文件）
+│   ├── main.js           # 主进程（窗口 / 下载 / 文件扫描 / 命令行打开文件 / 升级 IPC）
 │   ├── transcode.js      # ffmpeg 转码（老格式 → MP4，带缓存与进度）
 │   ├── assoc.js          # 文件关联注册表（HKCU，含 PowerShell 与 .reg 双通道）
 │   ├── installer.js      # 安装 / 卸载：复制、快捷方式、卸载项、清理
+│   ├── updater.js        # 在线升级：检查 Release / 下载校验 / 解压 / 拉起升级器
+│   ├── update-helper.js  # 升级器（独立进程：等主进程退出 → 覆盖文件 → 重启）
+│   ├── zipx.js           # 零依赖 zip 解压（store + deflate）
 │   └── preload.js        # contextBridge 桥接
 ├── build/
 │   ├── icon.ico          # Windows 打包图标（多尺寸）
@@ -127,6 +152,12 @@ tiantian-music/
 - **LRC 解析**：支持多时间戳行、逐行二分查找定位当前句。
 - **可视化**：`AnalyserNode` 实时频谱绘制到 Canvas。
 - **持久化**：收藏、历史、主题、音量等状态存于 `localStorage`。
+- **在线升级**：不依赖 electron-updater（体积大、要求 electron-builder 的 publish 配置）。
+  `updater.js` 直接走 GitHub Releases API；`zipx.js` 是自写的零依赖 zip 解压（Windows 上
+  `Expand-Archive` 依赖 PowerShell、`tar.exe` 可能缺失，都不如自己解稳）；
+  `update-helper.js` 通过 `ELECTRON_RUN_AS_NODE=1` 用应用自己的 exe 当 Node 跑，
+  等主进程退出、文件锁释放后再覆盖 —— 绕开 Windows「运行中的程序无法覆盖自身」的限制，
+  同时避免用 `.cmd` + `xcopy` 时中文路径的代码页问题。
 
 ## 版权说明
 
