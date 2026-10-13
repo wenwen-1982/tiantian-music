@@ -68,9 +68,9 @@
 | 在线升级 | 应用内检查 GitHub Releases 新版本 → 一键下载、校验（体积 + sha256）、解压、退出后覆盖文件并自动重启；支持更新日志展示、跳过版本、启动时自动检查、国内镜像回退，详见 [在线升级](#在线升级) |
 | 快捷键 | 空格播放暂停 · ←/→ 快退快进 5s · Ctrl+←/→ 切歌 · ↑/↓ 音量 · F 视频全屏 · Esc 关闭歌词页 |
 
-| 发现页 | 歌词页 | 视频播放 |
-|---|---|---|
-| ![发现](preview/01-discover.png) | ![歌词](preview/03-nowpanel.png) | ![视频](preview/08-video-playing.png) |
+| 发现页 | 歌词页 | 视频播放 | 软件更新 |
+|---|---|---|---|
+| ![发现](preview/01-discover.png) | ![歌词](preview/03-nowpanel.png) | ![视频](preview/08-video-playing.png) | ![软件更新](preview/09-update.png) |
 
 ## 运行
 
